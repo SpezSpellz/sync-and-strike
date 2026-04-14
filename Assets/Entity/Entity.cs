@@ -1,6 +1,5 @@
 using UnityEngine;
 
-public class Entity
-{
-    
+public class Entity {
+
 }
