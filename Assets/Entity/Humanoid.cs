@@ -5,13 +5,13 @@ public class Humanoid : Entity
 
     protected BaseMove current_move = null;
 
-    void Start()
+    public override void Start()
     {
+        base.Start();
         current_move = Moves.Instance.getWalkMove();
-        World.Instance.addEntity(this);
     }
 
-    public void Step()
+    public override void Step()
     {
         if (current_move != null)
         {
@@ -19,10 +19,5 @@ public class Humanoid : Entity
             if(current_move.isEnded())
                 current_move = Moves.Instance.getWalkMove();
         }
-    }
-
-    void Update()
-    {
-        Step();
     }
 }

@@ -14,6 +14,8 @@ public class CameraFollow : MonoBehaviour
             pos_sum += entity.transform.position;
             ++count;
         }
+        if (count <= 0)
+            return;
         pos_sum = pos_sum / count;
         transform.position = new Vector3(pos_sum.x, pos_sum.y, -10);
     }

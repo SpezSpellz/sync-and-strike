@@ -9,10 +9,6 @@ public class Physics : MonoBehaviour
     private float velocityX = 0;
     private float velocityY = 0;
     private bool onGround = true;
-    void Start()
-    {
-        
-    }
 
     public void applyVelocity(float velocityX, float velocityY)
     {
@@ -20,9 +16,9 @@ public class Physics : MonoBehaviour
         this.velocityY += velocityY;
     }
 
-    void Update()
+    public void Step()
     {
-        var dt = Time.deltaTime;
+        var dt = 0.016f;
         velocityY -= GRAVITY * dt;
         this.velocityX /= 10;
         var newX = this.transform.position.x + velocityX * dt;

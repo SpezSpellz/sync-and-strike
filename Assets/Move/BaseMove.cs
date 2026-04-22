@@ -1,26 +1,25 @@
+using System;
 using UnityEngine;
 
 public abstract class BaseMove
 {
-    private const float SECONDS_PER_FRAME = 0.016f;
-    private float time = 0;
+    private int tick = 0;
 
     public void update(Humanoid humanoid)
     {
-        this.time += Time.deltaTime;
-        this.time = this.isLooped() ? (this.time % this.getTimeLength()) : Mathf.Min(this.time, this.getTimeLength());
+        this.tick = this.isLooped() ? ((this.tick + 1) % this.getTickLength()) : Math.Min(this.tick + 1, this.getTickLength() - 1);
         var renderer = humanoid.GetComponent<SpriteRenderer>();
-        renderer.sprite = this.getSprites()[(int)(this.time * (1 / SECONDS_PER_FRAME))];
+        renderer.sprite = this.getSprites()[this.tick];
     }
 
-    public float getTimeLength()
+    public int getTickLength()
     {
-        return this.getSprites().Length * SECONDS_PER_FRAME;
+        return this.getSprites().Length;
     }
 
     public bool isEnded()
     {
-        return this.time >= this.getTimeLength();
+        return (this.tick + 1) >= this.getTickLength();
     }
 
     public abstract string getName();

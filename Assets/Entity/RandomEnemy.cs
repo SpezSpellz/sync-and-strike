@@ -5,7 +5,7 @@ public class RandomEnemy : Humanoid
 {
 
     private Random random = new Random();
-    public void Step()
+    public override void Step()
     {
         base.Step();
         var physics = this.GetComponent<Physics>();
@@ -34,10 +34,6 @@ public class RandomEnemy : Humanoid
                 this.current_move = Moves.Instance.getVerticalSlashMove();
         }
         physics.applyVelocity(culVeloX, culVeloY);
-    }
-
-    void Update()
-    {
-        Step();
+        physics.Step();
     }
 }

@@ -1,6 +1,11 @@
 using UnityEngine;
 
-public class Entity : MonoBehaviour
+public abstract class Entity : MonoBehaviour
 {
+    public virtual void Start()
+    {
+        World.Instance.addEntity(this);
+    }
 
+    public abstract void Step();
 }
