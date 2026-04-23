@@ -1,4 +1,0 @@
-repository "Synced Strike/Synced Strike@18967319506152@cloud"
-  path "/"
-    br "/main"
-    co "/main"
