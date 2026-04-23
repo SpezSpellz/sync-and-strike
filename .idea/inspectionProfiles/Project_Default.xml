@@ -1,0 +1,78 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="Eslint" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="altair" />
+          <option value="annotated-doc" />
+          <option value="annotated-types" />
+          <option value="anyio" />
+          <option value="attrs" />
+          <option value="blinker" />
+          <option value="cachetools" />
+          <option value="certifi" />
+          <option value="charset-normalizer" />
+          <option value="click" />
+          <option value="colorama" />
+          <option value="contourpy" />
+          <option value="cycler" />
+          <option value="fastapi" />
+          <option value="fonttools" />
+          <option value="gitdb" />
+          <option value="GitPython" />
+          <option value="h11" />
+          <option value="idna" />
+          <option value="Jinja2" />
+          <option value="joblib" />
+          <option value="jsonschema" />
+          <option value="jsonschema-specifications" />
+          <option value="kiwisolver" />
+          <option value="MarkupSafe" />
+          <option value="matplotlib" />
+          <option value="narwhals" />
+          <option value="numpy" />
+          <option value="packaging" />
+          <option value="pandas" />
+          <option value="pillow" />
+          <option value="protobuf" />
+          <option value="pyarrow" />
+          <option value="pydantic" />
+          <option value="pydantic_core" />
+          <option value="pydeck" />
+          <option value="pyparsing" />
+          <option value="python-dateutil" />
+          <option value="pytz" />
+          <option value="referencing" />
+          <option value="requests" />
+          <option value="rpds-py" />
+          <option value="scikit-learn" />
+          <option value="scipy" />
+          <option value="six" />
+          <option value="smmap" />
+          <option value="starlette" />
+          <option value="streamlit" />
+          <option value="tenacity" />
+          <option value="threadpoolctl" />
+          <option value="toml" />
+          <option value="tornado" />
+          <option value="typing-inspection" />
+          <option value="typing_extensions" />
+          <option value="tzdata" />
+          <option value="urllib3" />
+          <option value="uvicorn" />
+          <option value="watchdog" />
+          <option value="mlflow" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyStubPackagesAdvertiser" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="pandas" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
