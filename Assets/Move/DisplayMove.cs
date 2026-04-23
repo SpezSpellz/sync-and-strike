@@ -28,4 +28,14 @@ public class DisplayMove : BaseMove
     {
         return this.name;
     }
+
+    public override bool canInterrupt()
+    {
+        return true;
+    }
+
+    public override bool canHold()
+    {
+        return true;
+    }
 }

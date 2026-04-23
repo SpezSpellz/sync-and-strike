@@ -26,5 +26,9 @@ public abstract class BaseMove
 
     public abstract bool isLooped();
 
+    public abstract bool canInterrupt();
+
+    public abstract bool canHold();
+
     public abstract Sprite[] getSprites();
 }

@@ -5,20 +5,21 @@ public class Player : Humanoid
     public override void Step()
     {
         base.Step();
-        var physics = this.GetComponent<Physics>();
-        float culVeloY = 0;
-        float culVeloX = 0;
-        if (Input.GetKey(KeyCode.Space) && physics.isOnGround())
-            culVeloY += 8;
+        this.veloX /= 10;
+        bool onGround = this.isOnGround();
+        if (onGround)
+            this.veloY = 0;
+        if (Input.GetKey(KeyCode.Space) && onGround)
+            this.veloY += 0.128f;
         if (Input.GetKey(KeyCode.A))
         {
             this.GetComponent<SpriteRenderer>().flipX = true;
-            culVeloX -= 40;
+            this.veloX -= 0.128f;
         }
         if (Input.GetKey(KeyCode.D))
         {
             this.GetComponent<SpriteRenderer>().flipX = false;
-            culVeloX += 40;
+            this.veloX += 0.128f;
         }
         if (Input.GetKey(KeyCode.E))
         {
@@ -30,7 +31,5 @@ public class Player : Humanoid
             if (this.current_move.getName() == "walk")
                 this.current_move = Moves.Instance.getVerticalSlashMove();
         }
-        physics.applyVelocity(culVeloX, culVeloY);
-        physics.Step();
     }
 }
