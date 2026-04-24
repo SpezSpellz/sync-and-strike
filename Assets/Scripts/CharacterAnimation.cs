@@ -10,6 +10,7 @@ public class CharacterAnimation : MonoBehaviour
 
     private AnimationData current;
     private int currentFrame;
+    private System.Action onAnimationComplete;
 
     private void Awake()
     {
@@ -24,12 +25,15 @@ public class CharacterAnimation : MonoBehaviour
 
     private void Update()
     {
-        if (current == null || current.frames.Length == 0) return;
+        if (TurnManager.Instance.Phase != TurnPhase.Simulating) return; // If the player is still choosing, don't advance the frame.
+        if (current == null) return; // If no animation is loaded, don't advance the frame. SAFE GUARD SINCE IF ANIMATIONDATA ISN'T LOADED PROPERLY UNITY WILL BREAK
+        if (current.frames.Length == 0) return; // If an animationData exists but has no sprites in the frames array.
+
         Debug.Log($"Update — current: {current.moveId}, frame: {currentFrame}/{current.frames.Length}");
         AdvanceFrame();
     }
 
-    public void PlayMove(string moveId)
+    public void PlayMove(string moveId, System.Action onComplete = null)
     {
         foreach (var anim in animations)
         {
@@ -38,6 +42,7 @@ public class CharacterAnimation : MonoBehaviour
                 current = anim;
                 currentFrame = 0;
                 Debug.Log($"Playing {moveId} — {current.frames.Length} frames");
+                onAnimationComplete = onComplete;
                 return;
             }
         }
@@ -52,6 +57,8 @@ public class CharacterAnimation : MonoBehaviour
                 currentFrame = 0;
             else
             {
+                onAnimationComplete?.Invoke();
+                onAnimationComplete = null;
                 PlayMove("idle");
                 return;
             }

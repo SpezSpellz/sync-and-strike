@@ -10,12 +10,14 @@ public class TurnManager : MonoBehaviour
     private Dictionary<PlayerController, string> submittedMoves = new();
     private List<PlayerController> players = new();
 
-    [SerializeField] private float simulationDuration = 1.2f;
+    [SerializeField] private float defaultTurnDuration = 20f; // Keep it for now even if unused
 
     private void Awake()
     {
         Instance = this;
         Phase = TurnPhase.Planning;
+
+        Application.targetFrameRate = 60; // SET GAME FRAME RATE TO 60 FPS. DO NOT CHANGE
     }
 
     public void RegisterPlayer(PlayerController p)
@@ -38,16 +40,23 @@ public class TurnManager : MonoBehaviour
     {
         Phase = TurnPhase.Simulating;
 
-        foreach (var (player, moveId) in submittedMoves)
-            player.ExecuteMove(moveId);
+        int completedCount = 0;
+        int totalPlayers = submittedMoves.Count;
 
-        yield return new WaitForSeconds(simulationDuration);
+        foreach (var (player, moveId) in submittedMoves)
+        {
+            player.ExecuteMove(moveId, () => {
+                completedCount++;
+            });
+        }
+
+        // wait until all players finish their animation, CHANGE HERE FOR FRAME LOGIC
+        yield return new WaitUntil(() => completedCount >= totalPlayers);
 
         CombatManager.Instance.ResolveAllHits();
 
         Phase = TurnPhase.Resolved;
 
-        // Small pause before next planning phase
         yield return new WaitForSeconds(0.3f);
 
         submittedMoves.Clear();

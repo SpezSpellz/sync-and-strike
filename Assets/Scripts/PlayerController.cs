@@ -5,7 +5,7 @@ public class PlayerController : MonoBehaviour
     private CharacterAnimation anim;
     private CharacterPhysics physics;
 
-    private string selectedMove = "idle";
+    public string SelectedMove { get; private set; } = "idle";
 
     private void Awake()
     {
@@ -18,21 +18,15 @@ public class PlayerController : MonoBehaviour
         TurnManager.Instance.RegisterPlayer(this);
     }
 
-    private void Update()
+    public void SelectMove(string moveId)
     {
-        if (TurnManager.Instance.Phase != TurnPhase.Planning) return;
-
-        if (Input.GetKeyDown(KeyCode.E)) selectedMove = "horizontal_slash";
-        if (Input.GetKeyDown(KeyCode.Q)) selectedMove = "vertical_slash";
-        if (Input.GetKeyDown(KeyCode.W)) selectedMove = "block";
-
-        if (Input.GetKeyDown(KeyCode.Return))
-            TurnManager.Instance.SubmitMove(this, selectedMove);
+        SelectedMove = moveId;
+        Debug.Log($"Move selected: {moveId}");
     }
 
-    public void ExecuteMove(string moveId)
+    public void ExecuteMove(string moveId, System.Action onComplete = null)
     {
-        anim.PlayMove(moveId);
+        anim.PlayMove(moveId, onComplete);
         physics.ApplyMoveImpulse(moveId);
     }
 }
