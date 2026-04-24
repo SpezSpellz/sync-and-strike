@@ -2,7 +2,6 @@ using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
-    private TurnManager turnManager;
     private CharacterAnimation anim;
     private CharacterPhysics physics;
 
@@ -10,7 +9,6 @@ public class PlayerController : MonoBehaviour
 
     private void Awake()
     {
-        turnManager = TurnManager.Instance;
         anim = GetComponent<CharacterAnimation>();
         physics = GetComponent<CharacterPhysics>();
     }
@@ -28,9 +26,8 @@ public class PlayerController : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Q)) selectedMove = "vertical_slash";
         if (Input.GetKeyDown(KeyCode.W)) selectedMove = "block";
 
-        if (Input.GetKeyDown(KeyCode.Return)) {
+        if (Input.GetKeyDown(KeyCode.Return))
             TurnManager.Instance.SubmitMove(this, selectedMove);
-        }
     }
 
     public void ExecuteMove(string moveId)

@@ -12,7 +12,6 @@ public class AnimationData : ScriptableObject
 
     [Header("Animation")]
     public Sprite[] frames;
-    public float frameTime = 0.1f;
     public bool loop = false;
 
     [Header("Frame Events")]

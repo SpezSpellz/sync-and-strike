@@ -2,13 +2,20 @@ using UnityEngine;
 
 public class CharacterPhysics : MonoBehaviour
 {
+    private CharacterData characterData;
     private Rigidbody2D rb;
-
-    [SerializeField] private AnimationData[] animations;
+    
+    private AnimationData[] animations;
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
+        characterData = GetComponent<CharacterData>();
+    }
+
+    public void Initialize(AnimationData[] data)
+    {
+        animations = data;
     }
 
     public void ApplyMoveImpulse(string moveId)

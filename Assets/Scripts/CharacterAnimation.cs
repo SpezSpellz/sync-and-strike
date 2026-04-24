@@ -2,44 +2,64 @@ using UnityEngine;
 
 public class CharacterAnimation : MonoBehaviour
 {
-    [SerializeField] private AnimationData[] animations;
+    private CharacterData characterData;
+
+    private AnimationData[] animations;
     [SerializeField] private SpriteRenderer spriteRenderer;
     [SerializeField] private HitboxController hitbox;
 
     private AnimationData current;
     private int currentFrame;
-    private float timer;
+
+    private void Awake()
+    {
+        Debug.Log($"SpriteRenderer: {spriteRenderer}");
+        characterData = GetComponent<CharacterData>();
+    }
+
+    public void Initialize(AnimationData[] data)
+    {
+        animations = data;
+    }
 
     private void Update()
     {
         if (current == null || current.frames.Length == 0) return;
-
-        timer += Time.deltaTime;
-
-        if (timer >= current.frameTime)
-        {
-            timer -= current.frameTime;
-            AdvanceFrame();
-        }
+        Debug.Log($"Update — current: {current.moveId}, frame: {currentFrame}/{current.frames.Length}");
+        AdvanceFrame();
     }
 
     public void PlayMove(string moveId)
-{
-    foreach (var anim in animations)
     {
-        if (anim.moveId == moveId)
+        foreach (var anim in animations)
         {
-            current = anim;
-            currentFrame = 0;
-            timer = 0f;
-            return;
+            if (anim.moveId == moveId)
+            {
+                current = anim;
+                currentFrame = 0;
+                Debug.Log($"Playing {moveId} — {current.frames.Length} frames");
+                return;
+            }
         }
+        Debug.LogWarning($"No animation found for moveId: {moveId}");
     }
-    Debug.LogWarning($"No animation found for moveId: {moveId}");
-}
 
     private void AdvanceFrame()
     {
+        if (currentFrame >= current.frames.Length)
+        {
+            if (current.loop)
+                currentFrame = 0;
+            else
+            {
+                PlayMove("idle");
+                return;
+            }
+        }
+
+        // Should just be here right away in normal cases.
+        spriteRenderer.sprite = current.frames[currentFrame];
+
         if (current.events != null)
         {
             foreach (var e in current.events)
@@ -49,16 +69,11 @@ public class CharacterAnimation : MonoBehaviour
             }
         }
 
-        spriteRenderer.sprite = current.frames[currentFrame];
-        currentFrame++;
+        // only advance if not on last frame of a looping animation with 1 frame
+        if (current.loop && currentFrame == current.frames.Length - 1)
+            return;
 
-        if (currentFrame >= current.frames.Length)
-        {
-            if (current.loop)
-                currentFrame = 0;
-            else
-                current = null; // animation done, wait for next round
-        }
+        currentFrame++;
     }
 
     private void HandleEvent(FrameEventType type)

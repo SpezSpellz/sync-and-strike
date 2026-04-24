@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 0ef277e1eebd9ed47a40bdb7fa6c8ce8
+guid: 7d348868cf6199c4b88f14bdaf027d6a
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 4281637774074219296
-    second: jump_0
+      213: -3803549920350246036
+    second: superJump_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -100,13 +100,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: jump_0
+      name: superJump_0
       rect:
         serializedVersion: 2
-        x: 48
+        x: 41
         y: 46
-        width: 32
-        height: 41
+        width: 39
+        height: 38
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -115,8 +115,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 02b8694dede6b6b30800000000000000
-      internalID: 4281637774074219296
+      spriteID: c6bee00ef73173bc0800000000000000
+      internalID: -3803549920350246036
       vertices: []
       indices: 
       edges: []
@@ -135,7 +135,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      jump_0: 4281637774074219296
+      superJump_0: -3803549920350246036
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

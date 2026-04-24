@@ -1,10 +1,22 @@
 fileFormatVersion: 2
-guid: 850fa49df7b9ad043a51787bf175d2af
+guid: b95779b338aa8a541ae6e02df5c74a83
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 5865670524570963042
-    second: block_0
+      213: -6105628673336481916
+    second: walkf_0
+  - first:
+      213: 5718579488667071350
+    second: walkf_1
+  - first:
+      213: -4298613880584744700
+    second: walkf_2
+  - first:
+      213: -6199852141908569384
+    second: walkf_3
+  - first:
+      213: 8546612744555856308
+    second: walkf_4
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -100,13 +112,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: block_0
+      name: walkf_0
       rect:
         serializedVersion: 2
         x: 48
         y: 46
-        width: 35
-        height: 40
+        width: 43
+        height: 46
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -115,8 +127,96 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 26c0882b34c076150800000000000000
-      internalID: 5865670524570963042
+      spriteID: 487e6531213744ba0800000000000000
+      internalID: -6105628673336481916
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: walkf_1
+      rect:
+        serializedVersion: 2
+        x: 178
+        y: 46
+        width: 41
+        height: 46
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 673f5d12fb97c5f40800000000000000
+      internalID: 5718579488667071350
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: walkf_2
+      rect:
+        serializedVersion: 2
+        x: 312
+        y: 46
+        width: 35
+        height: 46
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 401de2d53714854c0800000000000000
+      internalID: -4298613880584744700
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: walkf_3
+      rect:
+        serializedVersion: 2
+        x: 434
+        y: 46
+        width: 41
+        height: 46
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8d2589d3353b5f9a0800000000000000
+      internalID: -6199852141908569384
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: walkf_4
+      rect:
+        serializedVersion: 2
+        x: 568
+        y: 46
+        width: 35
+        height: 46
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4b10410620bab9670800000000000000
+      internalID: 8546612744555856308
       vertices: []
       indices: 
       edges: []
@@ -135,7 +235,11 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      block_0: 5865670524570963042
+      walkf_0: -6105628673336481916
+      walkf_1: 5718579488667071350
+      walkf_2: -4298613880584744700
+      walkf_3: -6199852141908569384
+      walkf_4: 8546612744555856308
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

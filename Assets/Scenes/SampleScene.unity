@@ -325,7 +325,6 @@ GameObject:
   m_Component:
   - component: {fileID: 174946278}
   - component: {fileID: 174946277}
-  - component: {fileID: 174946276}
   m_Layer: 0
   m_Name: Wall (1)
   m_TagString: Untagged
@@ -333,18 +332,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &174946276
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 174946275}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d16eae29daded06449dd9db1ae8d02d2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Collider
 --- !u!212 &174946277
 SpriteRenderer:
   serializedVersion: 2
@@ -738,7 +725,6 @@ GameObject:
   m_Component:
   - component: {fileID: 730304476}
   - component: {fileID: 730304475}
-  - component: {fileID: 730304474}
   m_Layer: 0
   m_Name: Wall
   m_TagString: Untagged
@@ -746,18 +732,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &730304474
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 730304473}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d16eae29daded06449dd9db1ae8d02d2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Collider
 --- !u!212 &730304475
 SpriteRenderer:
   serializedVersion: 2
@@ -885,6 +859,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1129062765}
+  - component: {fileID: 1129062766}
+  - component: {fileID: 1129062767}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -907,6 +883,31 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1129062766
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1129062764}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 31bedc51c6b4bd04da3056df0d39fccc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TurnManager
+  simulationDuration: 1.2
+--- !u!114 &1129062767
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1129062764}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e6848cec5f4bfc749a549574d2617dd9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CombatManager
 --- !u!1 &1386574519
 GameObject:
   m_ObjectHideFlags: 0
@@ -918,6 +919,7 @@ GameObject:
   - component: {fileID: 1386574523}
   - component: {fileID: 1386574522}
   - component: {fileID: 1386574524}
+  - component: {fileID: 1386574525}
   m_Layer: 0
   m_Name: NPC
   m_TagString: Untagged
@@ -982,7 +984,7 @@ SpriteRenderer:
   m_Size: {x: 1, y: 1}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_SpriteSortPoint: 0
 --- !u!4 &1386574523
 Transform:
@@ -1006,11 +1008,48 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1386574519}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 285627d5030029c409a79742379f3a6a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RandomEnemy
+--- !u!70 &1386574525
+CapsuleCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1386574519}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 0
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0}
+  m_Size: {x: 0.24, y: 0.359375}
+  m_Direction: 0
 --- !u!1 &1435145581
 GameObject:
   m_ObjectHideFlags: 0
@@ -1098,7 +1137,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1460777062}
   - component: {fileID: 1460777061}
-  - component: {fileID: 1460777060}
   m_Layer: 0
   m_Name: Ceil
   m_TagString: Untagged
@@ -1106,18 +1144,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1460777060
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1460777059}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d16eae29daded06449dd9db1ae8d02d2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Collider
 --- !u!212 &1460777061
 SpriteRenderer:
   serializedVersion: 2
@@ -1202,7 +1228,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1685646483}
   - component: {fileID: 1685646482}
-  - component: {fileID: 1685646484}
   - component: {fileID: 1685646485}
   m_Layer: 0
   m_Name: Floor
@@ -1285,18 +1310,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1685646484
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1685646481}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d16eae29daded06449dd9db1ae8d02d2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Collider
 --- !u!61 &1685646485
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -1512,6 +1525,7 @@ GameObject:
   - component: {fileID: 1956807350}
   - component: {fileID: 1956807349}
   - component: {fileID: 1956807348}
+  - component: {fileID: 1956807352}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -1568,12 +1582,12 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -6939695964637348897, guid: b6a1741df99fc60478369c6923cf43a4, type: 3}
+  m_Sprite: {fileID: 8793639957104055765, guid: 13acd91e8b5a7774ebf75fbb402028e4, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 1, y: 1}
+  m_Size: {x: 0.3359375, y: 0.359375}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -1641,8 +1655,8 @@ CapsuleCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 0, y: 0}
-  m_Size: {x: 0.19, y: 0.29}
+  m_Offset: {x: 0, y: 0.02}
+  m_Size: {x: 0.19, y: 0.3}
   m_Direction: 0
 --- !u!50 &1956807349
 Rigidbody2D:
@@ -1683,7 +1697,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d1f3b2e82027be3428e9446242e8e542, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CharacterPhysics
-  animations: []
 --- !u!114 &1956807351
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1696,9 +1709,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 463fc07237febb94babbab1201349bc7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CharacterAnimation
-  animations: []
   spriteRenderer: {fileID: 1956807343}
   hitbox: {fileID: 104172578}
+--- !u!114 &1956807352
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1956807340}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ddbb8657c289c9c45b67784379a2f570, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterData
 --- !u!1 &2037020166
 GameObject:
   m_ObjectHideFlags: 0
