@@ -1,14 +1,26 @@
 using UnityEngine;
 using System;
 
-[Serializable]
-public class AnimationData
+[CreateAssetMenu(fileName = "NewAnimationData", menuName = "Data/AnimationData")]
+public class AnimationData : ScriptableObject
 {
-    public Move move;
+    [Header("Identity")]
+    public MoveType move;
+    public string moveId;      // e.g. "punch", "uppercut", "sweep_kick"
+    public string moveName;    // e.g. "Punch", "Uppercut", "Sweep Kick" (display name)
+    public Sprite icon;
+
+    [Header("Animation")]
     public Sprite[] frames;
     public float frameTime = 0.1f;
-    public bool loop = false; // most combat moves don't loop
+    public bool loop = false;
+
+    [Header("Frame Events")]
     public FrameEvent[] events;
+
+    [Header("Physics")]
+    public Vector2 impulse;
+    public float knockback;
 }
 
 [Serializable]
@@ -23,4 +35,15 @@ public enum FrameEventType
     ActivateHitbox,
     DeactivateHitbox,
     SpawnFX
+}
+
+public enum MoveType
+{
+    Idle,
+    Movement,
+    Attack,
+    Special,
+    Super,
+    Defense,
+    Hurt
 }

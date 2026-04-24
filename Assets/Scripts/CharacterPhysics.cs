@@ -4,31 +4,21 @@ public class CharacterPhysics : MonoBehaviour
 {
     private Rigidbody2D rb;
 
-    [SerializeField] private float punchForce = 6f;
-    [SerializeField] private float kickForce = 9f;
-    [SerializeField] private float dodgeForce = 5f;
+    [SerializeField] private AnimationData[] animations;
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
     }
 
-    public void ApplyMoveImpulse(Move move)
+    public void ApplyMoveImpulse(string moveId)
     {
-        Vector2 direction = FacingDirection();
+        AnimationData data = FindMove(moveId);
+        if (data == null) return;
 
-        switch (move)
-        {
-            case Move.Punch:
-                rb.AddForce(direction * punchForce, ForceMode2D.Impulse);
-                break;
-            case Move.Kick:
-                rb.AddForce(direction * kickForce, ForceMode2D.Impulse);
-                break;
-            case Move.Dodge:
-                rb.AddForce(-direction * dodgeForce, ForceMode2D.Impulse); // dodge away
-                break;
-        }
+        Vector2 direction = FacingDirection();
+        Vector2 force = new Vector2(data.impulse.x * direction.x, data.impulse.y);
+        rb.AddForce(force, ForceMode2D.Impulse);
     }
 
     public void ApplyKnockback(Vector2 knockback)
@@ -36,9 +26,18 @@ public class CharacterPhysics : MonoBehaviour
         rb.AddForce(knockback, ForceMode2D.Impulse);
     }
 
+    private AnimationData FindMove(string moveId)
+    {
+        foreach (var anim in animations)
+        {
+            if (anim.moveId == moveId) return anim;
+        }
+        Debug.LogWarning($"No AnimationData found for moveId: {moveId}");
+        return null;
+    }
+
     private Vector2 FacingDirection()
     {
-        // Returns +1 or -1 on X based on sprite facing
         return transform.localScale.x > 0 ? Vector2.right : Vector2.left;
     }
 }

@@ -6,7 +6,7 @@ public class PlayerController : MonoBehaviour
     private CharacterAnimation anim;
     private CharacterPhysics physics;
 
-    private Move selectedMove = Move.Idle;
+    private string selectedMove = "idle";
 
     private void Awake()
     {
@@ -24,18 +24,18 @@ public class PlayerController : MonoBehaviour
     {
         if (TurnManager.Instance.Phase != TurnPhase.Planning) return;
 
-        if (Input.GetKeyDown(KeyCode.E)) selectedMove = Move.Punch;
-        if (Input.GetKeyDown(KeyCode.Q)) selectedMove = Move.Kick;
-        if (Input.GetKeyDown(KeyCode.W)) selectedMove = Move.Dodge;
-        if (Input.GetKeyDown(KeyCode.R)) selectedMove = Move.Grab;
+        if (Input.GetKeyDown(KeyCode.E)) selectedMove = "horizontal_slash";
+        if (Input.GetKeyDown(KeyCode.Q)) selectedMove = "vertical_slash";
+        if (Input.GetKeyDown(KeyCode.W)) selectedMove = "block";
 
-        if (Input.GetKeyDown(KeyCode.Return))
+        if (Input.GetKeyDown(KeyCode.Return)) {
             TurnManager.Instance.SubmitMove(this, selectedMove);
+        }
     }
 
-    public void ExecuteMove(Move move)
+    public void ExecuteMove(string moveId)
     {
-        anim.PlayMove(move);
-        physics.ApplyMoveImpulse(move);
+        anim.PlayMove(moveId);
+        physics.ApplyMoveImpulse(moveId);
     }
 }

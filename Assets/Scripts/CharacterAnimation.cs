@@ -23,19 +23,20 @@ public class CharacterAnimation : MonoBehaviour
         }
     }
 
-    public void PlayMove(Move move)
+    public void PlayMove(string moveId)
+{
+    foreach (var anim in animations)
     {
-        foreach (var anim in animations)
+        if (anim.moveId == moveId)
         {
-            if (anim.move == move)
-            {
-                current = anim;
-                currentFrame = 0;
-                timer = 0f;
-                return;
-            }
+            current = anim;
+            currentFrame = 0;
+            timer = 0f;
+            return;
         }
     }
+    Debug.LogWarning($"No animation found for moveId: {moveId}");
+}
 
     private void AdvanceFrame()
     {

@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99106dc3f483f4a478be25e14fbd3158, type: 3}
+  m_Name: horizontal_slash
+  m_EditorClassIdentifier: Assembly-CSharp::AnimationData
+  move: 2
+  moveId: horizontal_slash
+  moveName: H Slash
+  icon: {fileID: 0}
+  frames:
+  - {fileID: -6939695964637348897, guid: b6a1741df99fc60478369c6923cf43a4, type: 3}
+  - {fileID: 4408985956767555964, guid: b6a1741df99fc60478369c6923cf43a4, type: 3}
+  - {fileID: 2816895114182060562, guid: b6a1741df99fc60478369c6923cf43a4, type: 3}
+  - {fileID: -2247918224548019269, guid: b6a1741df99fc60478369c6923cf43a4, type: 3}
+  - {fileID: 6283147460232431772, guid: b6a1741df99fc60478369c6923cf43a4, type: 3}
+  - {fileID: -2431866622470065252, guid: b6a1741df99fc60478369c6923cf43a4, type: 3}
+  - {fileID: 9087734092316401669, guid: b6a1741df99fc60478369c6923cf43a4, type: 3}
+  - {fileID: 8715441608282642310, guid: b6a1741df99fc60478369c6923cf43a4, type: 3}
+  frameTime: 0.1
+  loop: 0
+  events: []
+  impulse: {x: 0, y: 0}
+  knockback: 0

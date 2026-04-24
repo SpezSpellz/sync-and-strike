@@ -7,7 +7,7 @@ public class TurnManager : MonoBehaviour
     public static TurnManager Instance { get; private set; }
     public TurnPhase Phase { get; private set; }
 
-    private Dictionary<PlayerController, Move> submittedMoves = new();
+    private Dictionary<PlayerController, string> submittedMoves = new();
     private List<PlayerController> players = new();
 
     [SerializeField] private float simulationDuration = 1.2f;
@@ -24,13 +24,13 @@ public class TurnManager : MonoBehaviour
             players.Add(p);
     }
 
-    public void SubmitMove(PlayerController player, Move move)
+    public void SubmitMove(PlayerController player, string moveId)
     {
         if (Phase != TurnPhase.Planning) return;
 
-        submittedMoves[player] = move;
+        submittedMoves[player] = moveId;
 
-        if (submittedMoves.Count == players.Count)
+        if (submittedMoves.Count == players.Count) // start the round of every player have locked-in (submitted their move)
             StartCoroutine(SimulateRound());
     }
 
@@ -38,8 +38,8 @@ public class TurnManager : MonoBehaviour
     {
         Phase = TurnPhase.Simulating;
 
-        foreach (var (player, move) in submittedMoves)
-            player.ExecuteMove(move);
+        foreach (var (player, moveId) in submittedMoves)
+            player.ExecuteMove(moveId);
 
         yield return new WaitForSeconds(simulationDuration);
 

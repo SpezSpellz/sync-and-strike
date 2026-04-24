@@ -4,12 +4,3 @@ public enum TurnPhase
     Simulating,
     Resolved
 }
-
-public enum Move
-{
-    Idle,
-    Punch,
-    Kick,
-    Dodge,
-    Grab
-}
