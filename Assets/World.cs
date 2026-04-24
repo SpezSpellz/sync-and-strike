@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public class World : MonoBehaviour
@@ -38,6 +39,11 @@ public class World : MonoBehaviour
             ticksAwaiting -= SECONDS_PER_FRAME;
             Step();
         }
+    }
+
+    public Player getPlayer()
+    {
+        return (Player)this.entities.getList().First((x) => x is Player);
     }
 
     private void Step()

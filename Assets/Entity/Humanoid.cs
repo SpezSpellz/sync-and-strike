@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.LowLevelPhysics2D;
 
 public class Humanoid : Entity
 {
@@ -37,7 +36,6 @@ public class Humanoid : Entity
     public override void Start()
     {
         base.Start();
-        current_move = Moves.Instance.getWalkMove();
     }
 
     public bool isOnGround()
@@ -61,7 +59,7 @@ public class Humanoid : Entity
         {
             current_move.update(this);
             if(current_move.isEnded())
-                current_move = Moves.Instance.getWalkMove();
+                current_move = null;
         }
     }
 

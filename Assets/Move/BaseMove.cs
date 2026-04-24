@@ -5,7 +5,7 @@ public abstract class BaseMove
 {
     private int tick = 0;
 
-    public void update(Humanoid humanoid)
+    public virtual void update(Humanoid humanoid)
     {
         this.tick = this.isLooped() ? ((this.tick + 1) % this.getTickLength()) : Math.Min(this.tick + 1, this.getTickLength() - 1);
         var renderer = humanoid.GetComponent<SpriteRenderer>();
