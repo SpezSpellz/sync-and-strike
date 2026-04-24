@@ -1,22 +1,29 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-public class Move : MonoBehaviour
+public class MoveButton : MonoBehaviour
 {
-    [SerializeField] private string moveId;
-    private Button button;
+    [SerializeField] private Image icon;
+    public string moveId;
+    public string moveName;
 
     private void Awake()
     {
-        button = GetComponent<Button>();
-        button.onClick.AddListener(OnMoveButtonPressed);
+        GetComponent<Button>().onClick.AddListener(OnMoveButtonPressed);
+        icon = transform.Find("Icon").GetComponent<Image>();
+    }
+
+    public void Initialize(AnimationData data)
+    {
+        moveId = data.moveId;
+        moveName = data.moveName;
+
+        icon.sprite = data.icon;
     }
 
     private void OnMoveButtonPressed()
     {
         if (TurnManager.Instance.Phase != TurnPhase.Planning) return;
-
-        PlayerController player = FindObjectOfType<PlayerController>();
-        player.SelectMove(moveId);
+        FindFirstObjectByType<PlayerController>().SelectMove(moveId);
     }
 }

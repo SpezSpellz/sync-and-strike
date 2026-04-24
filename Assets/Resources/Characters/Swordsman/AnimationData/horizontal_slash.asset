@@ -15,7 +15,7 @@ MonoBehaviour:
   move: 2
   moveId: horizontal_slash
   moveName: H Slash
-  icon: {fileID: 0}
+  icon: {fileID: -2204512283233211356, guid: 0bfe03ada1311374c966810c6a7610b7, type: 3}
   frames:
   - {fileID: 582249055, guid: d9aa655246255e04d80a917f92ed2d8e, type: 3}
   - {fileID: -2089498518, guid: d9aa655246255e04d80a917f92ed2d8e, type: 3}

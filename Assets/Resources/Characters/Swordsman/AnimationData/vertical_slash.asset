@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99106dc3f483f4a478be25e14fbd3158, type: 3}
+  m_Name: vertical_slash
+  m_EditorClassIdentifier: Assembly-CSharp::AnimationData
+  move: 2
+  moveId: vertical_slash
+  moveName: VertSlash
+  icon: {fileID: -6031589310306195608, guid: 6fc072d9e1bdc184c810a4f099e97a2d, type: 3}
+  frames:
+  - {fileID: 4768542699245325290, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: 2917013942249415831, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: -1637989536631286731, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: 1744558331514984967, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: -5058299941869803547, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: 3418691064407512936, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: 2737019910461315415, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: 5494355144661515585, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: 5744507735851360793, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: -566185624820436550, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: -7532127602158458110, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: -2145498374641979694, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: 6291734109556155320, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: 4660136042048709955, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: -644168189182117150, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: 6030098763664812439, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  - {fileID: -4307049086367002590, guid: d3d439cc4629e45469335e96888ed7d8, type: 3}
+  loop: 0
+  events:
+  - frame: 11
+    type: 0
+  - frame: 13
+    type: 1
+  impulse: {x: 0, y: 0}
+  knockback: 0

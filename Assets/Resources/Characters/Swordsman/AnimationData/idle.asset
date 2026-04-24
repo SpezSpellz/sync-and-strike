@@ -15,7 +15,7 @@ MonoBehaviour:
   move: 0
   moveId: idle
   moveName: Idle
-  icon: {fileID: 0}
+  icon: {fileID: -6043352356649296883, guid: a6b56b19e2996e44e88a96e87e2e239c, type: 3}
   frames:
   - {fileID: 8793639957104055765, guid: 13acd91e8b5a7774ebf75fbb402028e4, type: 3}
   loop: 0
