@@ -42,9 +42,9 @@ public class MoveSelectionUI : MonoBehaviour
 
         columnMovement = CreateColumn("Movement", Vector2.zero);
         columnAttack   = CreateColumn("Attack", Vector2.zero);
-        columnDefense  = CreateColumn("Defense", Vector2.zero);
         columnSpecial  = CreateColumn("Special", Vector2.zero);
         columnSuper    = CreateColumn("Super", Vector2.zero);
+        columnDefense  = CreateColumn("Defense", Vector2.zero);
 
 
         AnimationData[] allMoves = Resources.LoadAll<AnimationData>("Characters/Swordsman/AnimationData"); // CHANGE THIS PATH TO MATCH YOUR CHARACTER

@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99106dc3f483f4a478be25e14fbd3158, type: 3}
+  m_Name: dash
+  m_EditorClassIdentifier: Assembly-CSharp::AnimationData
+  move: 0
+  moveId: dash
+  moveName: Dash
+  icon: {fileID: -7848039375673857549, guid: 0b40fc3d9c4487143804b43d851a7800, type: 3}
+  frames:
+  - {fileID: 7110878671101974141, guid: 04dd565d3f46b414ca3ba3c130551d71, type: 3}
+  loop: 0
+  events: []
+  impulse: {x: 0, y: 0}
+  knockback: 0

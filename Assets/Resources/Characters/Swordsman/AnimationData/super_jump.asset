@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99106dc3f483f4a478be25e14fbd3158, type: 3}
+  m_Name: super_jump
+  m_EditorClassIdentifier: Assembly-CSharp::AnimationData
+  move: 0
+  moveId: super_jump
+  moveName: Super Jump
+  icon: {fileID: -16536359, guid: dbd3e3f859d69924db27efe5a7a3e930, type: 3}
+  frames:
+  - {fileID: -3803549920350246036, guid: 7d348868cf6199c4b88f14bdaf027d6a, type: 3}
+  loop: 0
+  events: []
+  impulse: {x: 0, y: 0}
+  knockback: 0

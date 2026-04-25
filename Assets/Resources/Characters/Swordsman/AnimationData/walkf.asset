@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99106dc3f483f4a478be25e14fbd3158, type: 3}
+  m_Name: walkf
+  m_EditorClassIdentifier: Assembly-CSharp::AnimationData
+  move: 0
+  moveId: walkf
+  moveName: Walk F
+  icon: {fileID: -282247020, guid: c0c0c88ff0d32ea44b320d1f9e77e13e, type: 3}
+  frames:
+  - {fileID: -6105628673336481916, guid: b95779b338aa8a541ae6e02df5c74a83, type: 3}
+  - {fileID: 5718579488667071350, guid: b95779b338aa8a541ae6e02df5c74a83, type: 3}
+  - {fileID: -4298613880584744700, guid: b95779b338aa8a541ae6e02df5c74a83, type: 3}
+  - {fileID: -6199852141908569384, guid: b95779b338aa8a541ae6e02df5c74a83, type: 3}
+  - {fileID: 8546612744555856308, guid: b95779b338aa8a541ae6e02df5c74a83, type: 3}
+  loop: 0
+  events: []
+  impulse: {x: 0, y: 0}
+  knockback: 0
