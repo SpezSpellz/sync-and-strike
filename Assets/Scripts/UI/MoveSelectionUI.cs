@@ -7,7 +7,9 @@ public class MoveSelectionUI : MonoBehaviour
 {
     [SerializeField] private GameObject moveButtonPrefab;
     [SerializeField] private GameObject moveColumnPrefab;
+    [SerializeField] private GameObject confirmColumnPrefab;
     [SerializeField] private GameObject textButtonPrefab;
+    
 
     private Transform columnMovement;
     private Transform columnAttack;
@@ -19,14 +21,16 @@ public class MoveSelectionUI : MonoBehaviour
     public int confirmButtonHeight = 60;
 
     public int columnWidth = 160;
-    public int columnHeight = 300;
+    public int columnHeight = 280;
     public int moveButtonWidth = 80;
     public int moveButtonHeight = 80;
+
+    private int nameBoxHeight = 20;
 
 
     private void Start()
     {
-        GridLayoutGroup columnConfirm = Instantiate(moveColumnPrefab, transform).GetComponent<UnityEngine.UI.GridLayoutGroup>();
+        GridLayoutGroup columnConfirm = Instantiate(confirmColumnPrefab, transform).GetComponent<UnityEngine.UI.GridLayoutGroup>();
         columnConfirm.gameObject.name = "Confirm";
         columnConfirm.cellSize = new Vector2(confirmColumnWidth, confirmButtonHeight);
         columnConfirm.spacing = new Vector2(0, 5);
@@ -51,6 +55,7 @@ public class MoveSelectionUI : MonoBehaviour
             if (column == null) continue;
 
             GameObject buttonObj = Instantiate(moveButtonPrefab, column);
+            buttonObj.name = move.moveId;
             MoveButton moveButton = buttonObj.GetComponent<MoveButton>();
             moveButton.Initialize(move);
         }
@@ -58,10 +63,15 @@ public class MoveSelectionUI : MonoBehaviour
 
     private Transform CreateColumn(string name, Vector2 spacing)
     {
-        GridLayoutGroup grid = Instantiate(moveColumnPrefab, transform)
-                                .GetComponent<GridLayoutGroup>();
+        GameObject fullColumn = Instantiate(moveColumnPrefab, transform);
+        fullColumn.name = name;
 
-        grid.gameObject.name = name;
+        TextMeshProUGUI nameText = fullColumn.transform.Find("MoveName").GetComponent<TextMeshProUGUI>();
+        nameText.text = name;
+        Transform moveIcons = fullColumn.transform.Find("MoveIcons");
+        GridLayoutGroup grid = moveIcons.GetComponent<GridLayoutGroup>();
+
+        grid.gameObject.name = "Moves";
 
         grid.cellSize = new Vector2(moveButtonWidth, moveButtonHeight);
         grid.spacing = spacing;

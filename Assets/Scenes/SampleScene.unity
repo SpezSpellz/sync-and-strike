@@ -1873,6 +1873,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MoveSelection
   moveButtonPrefab: {fileID: 3382168721225523719, guid: 4243bf1234ab5eb4dad79f0f692880f4, type: 3}
   moveColumnPrefab: {fileID: 6661139334025420849, guid: 65107f76e7ddbd044978917bc215747f, type: 3}
+  confirmColumnPrefab: {fileID: 8342293813583826452, guid: 5347eeecc51be7046acf1ac7f65da558, type: 3}
   textButtonPrefab: {fileID: 3659315464312906156, guid: 578562feb9d8a7a4198a31b836d01be2, type: 3}
   confirmColumnWidth: 160
   confirmButtonHeight: 60
