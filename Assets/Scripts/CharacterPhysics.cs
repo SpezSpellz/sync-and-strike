@@ -1,46 +1,68 @@
 using UnityEngine;
 
-public class CharacterPhysics : MonoBehaviour
+public class CharacterPhysics : PhysicsCollider
 {
+
     private CharacterData characterData;
-    private Rigidbody2D rb;
-    
-    private AnimationData[] animations;
+    private float veloX = 0.0f;
+    private float veloY = 0.0f;
 
-    private void Awake()
+    public void Initialize(CharacterData characterData)
     {
-        rb = GetComponent<Rigidbody2D>();
-        characterData = GetComponent<CharacterData>();
+        this.characterData = characterData;
     }
-
-    public void Initialize(AnimationData[] data)
+    public void ApplyImpulse(Vector2 impulse)
     {
-        animations = data;
-    }
-
-    public void ApplyMoveImpulse(string moveId)
-    {
-        AnimationData data = FindMove(moveId);
-        if (data == null) return;
-
         Vector2 direction = FacingDirection();
-        Vector2 force = new Vector2(data.impulse.x * direction.x, data.impulse.y);
-        rb.AddForce(force, ForceMode2D.Impulse);
+        veloX += impulse.x * direction.x;
+        veloY += impulse.y;
     }
 
     public void ApplyKnockback(Vector2 knockback)
     {
-        rb.AddForce(knockback, ForceMode2D.Impulse);
+        veloX += knockback.x;
+        veloY += knockback.y;
     }
 
-    private AnimationData FindMove(string moveId)
+    public override AABB getBoundingBox()
     {
-        foreach (var anim in animations)
-        {
-            if (anim.moveId == moveId) return anim;
-        }
-        Debug.LogWarning($"No AnimationData found for moveId: {moveId}");
-        return null;
+        return new AABB(
+            transform.position.x - this.characterData.width / 2,
+            transform.position.y - this.characterData.height / 2,
+            transform.position.x + this.characterData.width / 2,
+            transform.position.y + this.characterData.height / 2
+        );
+    }
+
+    public override Vector2 getPosition()
+    {
+        return new Vector2(transform.position.x, transform.position.y);
+    }
+
+    public override Vector2 getVelocity()
+    {
+        return new Vector2(veloX, veloY);
+    }
+
+    public override bool hasGravity()
+    {
+        return true;
+    }
+
+    public override void setPosition(float x, float y)
+    {
+        transform.position = new Vector3(x, y, transform.position.z);
+    }
+
+    public override void setVelocity(float x, float y)
+    {
+        veloX = x;
+        veloY = y;
+    }
+
+    public override void Step()
+    {
+        PhysicsManager.Instance.StepFor(this);
     }
 
     private Vector2 FacingDirection()

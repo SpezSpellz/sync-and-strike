@@ -20,5 +20,5 @@ MonoBehaviour:
   - {fileID: 4281637774074219296, guid: abf2c526b7d3b07459814ef7a3a3a2e3, type: 3}
   loop: 0
   events: []
-  impulse: {x: 0, y: 0}
+  impulse: {x: 0, y: 10}
   knockback: 0

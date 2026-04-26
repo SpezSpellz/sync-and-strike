@@ -2,8 +2,6 @@ using UnityEngine;
 
 public class CharacterAnimation : MonoBehaviour
 {
-    private CharacterData characterData;
-
     private AnimationData[] animations;
     [SerializeField] private SpriteRenderer spriteRenderer;
     [SerializeField] private HitboxController hitbox;
@@ -15,7 +13,6 @@ public class CharacterAnimation : MonoBehaviour
     private void Awake()
     {
         Debug.Log($"SpriteRenderer: {spriteRenderer}");
-        characterData = GetComponent<CharacterData>();
     }
 
     public void Initialize(AnimationData[] data)

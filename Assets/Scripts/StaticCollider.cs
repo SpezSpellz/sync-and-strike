@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class Collider : Entity // "Collider" has the same name as built-in Unity component. Not recommended.
+public class StaticCollider : PhysicsCollider
 {
     public override AABB getBoundingBox()
     {
