@@ -42,6 +42,7 @@ public class Humanoid : Entity
 
     public bool isOnGround()
     {
+        /*
         var self_aabb = this.getBoundingBox();
         foreach (Entity entity in World.Instance.getEntities())
         {
@@ -52,6 +53,7 @@ public class Humanoid : Entity
             if (dist < 1)
                 return true;
         }
+        */
         return false;
     }
 

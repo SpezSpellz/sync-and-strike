@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 public class PhysicsManager : MonoBehaviour
@@ -28,18 +29,32 @@ public class PhysicsManager : MonoBehaviour
     public void StepFor(PhysicsCollider collider)
     {
         Vector2 velo = collider.getVelocity();
+        var velo_copy = velo;
         var beg = collider.getPosition();
-        var tar = this.getClampedPosition(collider, velo);
-        beg += tar;
-        collider.setPosition(beg.x, beg.y);
-        velo -= tar;
-        tar = this.getClampedPosition(collider, new Vector2(velo.x, 0));
-        beg += tar;
-        collider.setPosition(beg.x, beg.y);
-        velo -= tar;
-        tar = this.getClampedPosition(collider, new Vector2(0, velo.y));
-        collider.setPosition(beg.x + tar.x, beg.y + tar.y);
-        velo = collider.getVelocity();
+        int tries = 0;
+        while(tries < 10 && velo.sqrMagnitude > 0.00001)
+        {
+            var (tar, vert) = this.getClampedPosition(collider, velo);
+            beg += tar;
+            var collided = (velo - tar).sqrMagnitude > 0.00001;
+            velo -= tar;
+            if (collided)
+            {
+                if (vert)
+                {
+                    velo_copy.x *= -0.5f;
+                    velo.x *= -0.5f;
+                }
+                else
+                {
+                    velo_copy.y *= -0.5f;
+                    velo.y *= -0.5f;
+                }
+            }
+            collider.setPosition(beg.x, beg.y);
+            ++tries;
+        }
+        velo = velo_copy;
         if (collider.hasGravity())
         {
             velo.y -= GRAVITY;
@@ -47,11 +62,12 @@ public class PhysicsManager : MonoBehaviour
         collider.setVelocity(velo.x, velo.y);
     }
 
-    private Vector2 getClampedPosition(PhysicsCollider collider, Vector2 velo)
+    private (Vector2, bool) getClampedPosition(PhysicsCollider collider, Vector2 velo)
     {
+        bool vert = false;
         AABB aabb = collider.getBoundingBox();
         if (aabb == null || velo.sqrMagnitude == 0)
-            return Vector2.zero;
+            return (Vector2.zero, false);
         float dist = float.PositiveInfinity;
         foreach (PhysicsCollider otherCollider in this.physicsObjects.getList())
         {
@@ -60,10 +76,13 @@ public class PhysicsManager : MonoBehaviour
             AABB aabb2 = otherCollider.getBoundingBox();
             if (aabb2 == null)
                 continue;
-            float cur_dist = aabb.sweep(aabb2, velo.x, velo.y);
-            if (cur_dist < dist)
-                dist = cur_dist;
+            var res = aabb.sweep(aabb2, velo.x, velo.y);
+            if (res.Distance < dist)
+            {
+                dist = res.Distance;
+                vert = res.HitVertical;
+            }
         }
-        return velo.normalized * Mathf.Min(velo.magnitude, Mathf.Max(0, dist - 0.01f));
+        return (velo.normalized * Mathf.Min(velo.magnitude, Mathf.Max(0, dist - 0.001f)), vert);
     }
 }
