@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using UnityEngine;
 
@@ -8,7 +9,7 @@ public class TurnManager : MonoBehaviour
 
     class PlayerTurnData
     {
-        public PlayerController player;
+        public CharacterController player;
         public string? submitted_move;
     }
 
@@ -25,7 +26,13 @@ public class TurnManager : MonoBehaviour
         Application.targetFrameRate = 60; // SET GAME FRAME RATE TO 60 FPS. DO NOT CHANGE
     }
 
-    public int RegisterPlayer(PlayerController p)
+    public void ForEachPlayer(Action<CharacterController> callback)
+    {
+        foreach (PlayerTurnData playerTurnData in players.getList())
+            callback(playerTurnData.player);
+    }
+
+    public int RegisterPlayer(CharacterController p)
     {
         var plr_data = this.players.getOr(p.id, default);
         if (plr_data != null && plr_data.player == p)
@@ -35,15 +42,19 @@ public class TurnManager : MonoBehaviour
         });
     }
 
-    public void SubmitMove(PlayerController p)
+    public bool IsSubmitted(CharacterController p)
+    {
+        return this.players.get(p.id).submitted_move != null;
+    }
+
+    public void SubmitMove(CharacterController p)
     {
         if (Phase != TurnPhase.Planning) return;
-        print("Get Player " + p.id);
         var plr_data = this.players.get(p.id);
         if (plr_data.submitted_move == null)
             ++submittedMoves;
         plr_data.submitted_move = p.SelectedMove;
-        if (submittedMoves == players.getList().Count) // start the round of every player have locked-in (submitted their move)
+        if (submittedMoves >= players.getList().Count) // start the round of every player have locked-in (submitted their move)
             StartCoroutine(SimulateRound());
     }
 
@@ -56,7 +67,7 @@ public class TurnManager : MonoBehaviour
 
         foreach (var player_turn_data in players.getList())
         {
-            player_turn_data.player.ExecuteMove(player_turn_data.submitted_move, () => {
+            player_turn_data.player.ExecuteMove(player_turn_data.submitted_move ?? "idle", () => {
                 completedCount++;
             });
         }

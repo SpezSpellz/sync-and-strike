@@ -7,13 +7,11 @@ public class CameraFollow : MonoBehaviour
     {
         int count = 0;
         Vector3 pos_sum = Vector3.zero;
-        foreach(Entity entity in World.Instance.getEntities())
+        TurnManager.Instance.ForEachPlayer(entity =>
         {
-            if(entity is not Humanoid)
-                continue;
             pos_sum += entity.transform.position;
             ++count;
-        }
+        });
         if (count <= 0)
             return;
         pos_sum = pos_sum / count;
