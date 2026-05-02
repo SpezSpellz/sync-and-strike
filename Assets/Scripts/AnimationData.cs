@@ -31,8 +31,7 @@ public struct FrameEvent
 
 public enum FrameEventType
 {
-    ActivateHitbox,
-    DeactivateHitbox,
+    BasicAttack,
     SpawnFX
 }
 

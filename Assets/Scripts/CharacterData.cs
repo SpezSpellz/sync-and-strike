@@ -8,6 +8,10 @@ public class CharacterData : MonoBehaviour
 
     public float height;
 
+    public float health;
+
+    public float maxHealth;
+
     private void Awake()
     {
         animations = Resources.LoadAll<AnimationData>("Characters/Swordsman/AnimationData"); // CHANGE HERE

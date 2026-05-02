@@ -57,7 +57,6 @@ public class TurnManager : MonoBehaviour
         if (submittedMoves >= players.getList().Count) // start the round of every player have locked-in (submitted their move)
             StartCoroutine(SimulateRound());
     }
-
     private IEnumerator SimulateRound()
     {
         Phase = TurnPhase.Simulating;
@@ -74,8 +73,6 @@ public class TurnManager : MonoBehaviour
 
         // wait until all players finish their animation, CHANGE HERE FOR FRAME LOGIC
         yield return new WaitUntil(() => completedCount >= totalPlayers);
-
-        CombatManager.Instance.ResolveAllHits();
 
         Phase = TurnPhase.Resolved;
 

@@ -1,12 +1,8 @@
-using UnityEngine;
-
-public class Hurtbox : MonoBehaviour
+﻿public class HurtBox : AABB
 {
-    public CharacterPhysics owner;
-
-    private void Awake()
+    public CharacterController owner { get; private set; }
+    public HurtBox(CharacterController owner, float minX, float minY, float maxX, float maxY) : base(minX, minY, maxX, maxY)
     {
-        if (owner == null)
-            owner = GetComponentInParent<CharacterPhysics>();
+        this.owner = owner;
     }
 }
