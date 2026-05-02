@@ -31,6 +31,12 @@ public class PlayerController : MonoBehaviour
         Debug.Log($"Move selected: {moveId}");
     }
 
+    public void Flip(bool flipped)
+    {
+        if(flipped != transform.localScale.x < 0)
+            transform.localScale = transform.localScale - new Vector3(transform.localScale.x * 2, 0, 0);
+    }
+
     public void ExecuteMove(string moveId, System.Action onComplete = null)
     {
         anim.PlayMove(moveId, onComplete);

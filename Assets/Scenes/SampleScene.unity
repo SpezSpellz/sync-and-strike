@@ -268,6 +268,7 @@ GameObject:
   m_Component:
   - component: {fileID: 174946278}
   - component: {fileID: 174946277}
+  - component: {fileID: 174946279}
   m_Layer: 0
   m_Name: Wall (1)
   m_TagString: Untagged
@@ -349,6 +350,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &174946279
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 174946275}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b2f05a6956ea81d40b3dfe79b5d57539, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StaticCollider
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -668,6 +681,7 @@ GameObject:
   m_Component:
   - component: {fileID: 730304476}
   - component: {fileID: 730304475}
+  - component: {fileID: 730304477}
   m_Layer: 0
   m_Name: Wall
   m_TagString: Untagged
@@ -749,6 +763,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &730304477
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 730304473}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b2f05a6956ea81d40b3dfe79b5d57539, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StaticCollider
 --- !u!1 &904364431
 GameObject:
   m_ObjectHideFlags: 0
@@ -1130,6 +1156,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1460777062}
   - component: {fileID: 1460777061}
+  - component: {fileID: 1460777063}
   m_Layer: 0
   m_Name: Ceil
   m_TagString: Untagged
@@ -1211,6 +1238,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1460777063
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1460777059}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b2f05a6956ea81d40b3dfe79b5d57539, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StaticCollider
 --- !u!1 &1685646481
 GameObject:
   m_ObjectHideFlags: 0
@@ -1695,6 +1734,7 @@ MonoBehaviour:
   moveColumnPrefab: {fileID: 6661139334025420849, guid: 65107f76e7ddbd044978917bc215747f, type: 3}
   confirmColumnPrefab: {fileID: 8342293813583826452, guid: 5347eeecc51be7046acf1ac7f65da558, type: 3}
   textButtonPrefab: {fileID: 3659315464312906156, guid: 578562feb9d8a7a4198a31b836d01be2, type: 3}
+  flipPrefab: {fileID: 717011846730250756, guid: 21b2961ec3c90094c8da7c447930bcb0, type: 3}
   confirmColumnWidth: 160
   confirmButtonHeight: 60
   columnWidth: 160

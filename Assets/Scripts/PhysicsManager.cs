@@ -3,7 +3,7 @@ using UnityEngine;
 
 public class PhysicsManager : MonoBehaviour
 {
-    const float GRAVITY = .2f * 0.016f;
+    const float GRAVITY = .4f * 0.016f;
     public static PhysicsManager Instance { get; private set; }
     private IndexSet<PhysicsCollider> physicsObjects = new();
     private void Awake()

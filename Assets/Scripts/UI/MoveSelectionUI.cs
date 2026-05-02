@@ -8,7 +8,8 @@ public class MoveSelectionUI : MonoBehaviour
     [SerializeField] private GameObject moveColumnPrefab;
     [SerializeField] private GameObject confirmColumnPrefab;
     [SerializeField] private GameObject textButtonPrefab;
-    
+    [SerializeField] private GameObject flipPrefab;
+
 
     private Transform columnMovement;
     private Transform columnAttack;
@@ -38,6 +39,10 @@ public class MoveSelectionUI : MonoBehaviour
         lockInButtonObj.GetComponentInChildren<TextMeshProUGUI>().text = "Lock In";
 
         lockInButtonObj.AddComponent<LockIn>();
+
+        GameObject flipToggleObj = Instantiate(flipPrefab, columnConfirm.transform);
+
+        flipToggleObj.AddComponent<Flip>();
 
         columnMovement = CreateColumn("Movement", Vector2.zero);
         columnAttack   = CreateColumn("Attack", Vector2.zero);

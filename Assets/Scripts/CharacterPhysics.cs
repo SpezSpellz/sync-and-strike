@@ -63,6 +63,7 @@ public class CharacterPhysics : PhysicsCollider
     public override void Step()
     {
         PhysicsManager.Instance.StepFor(this);
+        this.veloX /= 10;
     }
 
     private Vector2 FacingDirection()

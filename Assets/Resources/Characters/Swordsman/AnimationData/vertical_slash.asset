@@ -40,5 +40,5 @@ MonoBehaviour:
     type: 0
   - frame: 13
     type: 1
-  impulse: {x: 0, y: 0}
+  impulse: {x: 0.3, y: 0}
   knockback: 0
