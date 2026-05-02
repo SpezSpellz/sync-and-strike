@@ -45,6 +45,16 @@ public class IndexSet<T>
         return this.items[this.indexes[id]];
     }
 
+    public T getOr(int id, T otherwise)
+    {
+        if (id >= this.indexes.Count)
+            return otherwise;
+        var idx = this.indexes[id];
+        if (idx >= this.items.Count)
+            return otherwise;
+        return this.items[idx];
+    }
+
     public List<T> getList()
     {
         return this.items;

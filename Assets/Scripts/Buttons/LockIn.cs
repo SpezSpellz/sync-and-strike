@@ -25,6 +25,6 @@ public class LockIn : MonoBehaviour
         if (TurnManager.Instance.Phase != TurnPhase.Planning) return;
 
         PlayerController player = FindFirstObjectByType<PlayerController>();
-        TurnManager.Instance.SubmitMove(player, player.SelectedMove);
+        TurnManager.Instance.SubmitMove(player);
     }
 }

@@ -8,7 +8,7 @@ public class PlayerController : MonoBehaviour
     private CharacterAnimation anim;
     private CharacterPhysics physics;
     private CharacterData characterData;
-
+    public int id {  get; private set; }
     public string SelectedMove { get; private set; } = "idle";
 
     private void Awake()
@@ -22,7 +22,7 @@ public class PlayerController : MonoBehaviour
     {
         physics.Initialize(characterData);
         anim.Initialize(characterData.animations);
-        TurnManager.Instance.RegisterPlayer(this);
+        this.id = TurnManager.Instance.RegisterPlayer(this);
     }
 
     public void SelectMove(string moveId)

@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class TurnManager : MonoBehaviour
@@ -7,8 +6,14 @@ public class TurnManager : MonoBehaviour
     public static TurnManager Instance { get; private set; }
     public TurnPhase Phase { get; private set; }
 
-    private Dictionary<PlayerController, string> submittedMoves = new();
-    private List<PlayerController> players = new();
+    class PlayerTurnData
+    {
+        public PlayerController player;
+        public string? submitted_move;
+    }
+
+    private IndexSet<PlayerTurnData> players = new();
+    private int submittedMoves;
 
     [SerializeField] private float defaultTurnDuration = 20f; // Keep it for now even if unused
 
@@ -20,19 +25,25 @@ public class TurnManager : MonoBehaviour
         Application.targetFrameRate = 60; // SET GAME FRAME RATE TO 60 FPS. DO NOT CHANGE
     }
 
-    public void RegisterPlayer(PlayerController p)
+    public int RegisterPlayer(PlayerController p)
     {
-        if (!players.Contains(p))
-            players.Add(p);
+        var plr_data = this.players.getOr(p.id, default);
+        if (plr_data != null && plr_data.player == p)
+            return p.id;
+        return players.add(new PlayerTurnData{
+            player = p,
+        });
     }
 
-    public void SubmitMove(PlayerController player, string moveId)
+    public void SubmitMove(PlayerController p)
     {
         if (Phase != TurnPhase.Planning) return;
-
-        submittedMoves[player] = moveId;
-
-        if (submittedMoves.Count == players.Count) // start the round of every player have locked-in (submitted their move)
+        print("Get Player " + p.id);
+        var plr_data = this.players.get(p.id);
+        if (plr_data.submitted_move == null)
+            ++submittedMoves;
+        plr_data.submitted_move = p.SelectedMove;
+        if (submittedMoves == players.getList().Count) // start the round of every player have locked-in (submitted their move)
             StartCoroutine(SimulateRound());
     }
 
@@ -41,11 +52,11 @@ public class TurnManager : MonoBehaviour
         Phase = TurnPhase.Simulating;
 
         int completedCount = 0;
-        int totalPlayers = submittedMoves.Count;
+        int totalPlayers = players.getList().Count;
 
-        foreach (var (player, moveId) in submittedMoves)
+        foreach (var player_turn_data in players.getList())
         {
-            player.ExecuteMove(moveId, () => {
+            player_turn_data.player.ExecuteMove(player_turn_data.submitted_move, () => {
                 completedCount++;
             });
         }
@@ -59,7 +70,9 @@ public class TurnManager : MonoBehaviour
 
         // yield return new WaitForSeconds(0.3f);
 
-        submittedMoves.Clear();
+        submittedMoves = 0;
+        foreach (var player_turn_data in players.getList())
+            player_turn_data.submitted_move = null;
         Phase = TurnPhase.Planning;
     }
 }
