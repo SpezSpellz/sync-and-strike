@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using UnityEngine;
 
 public class TurnManager : MonoBehaviour
@@ -7,14 +6,19 @@ public class TurnManager : MonoBehaviour
     public static TurnManager Instance { get; private set; }
     public TurnPhase Phase { get; private set; }
 
+    private const float SECONDS_PER_FRAME = 0.016f; // SET GAME FRAME RATE TO 60 FPS. DO NOT CHANGE
+
     class PlayerTurnData
     {
         public CharacterController player;
+        public CharacterController.SaveData saveData;
         public string? submitted_move;
     }
 
     private IndexSet<PlayerTurnData> players = new();
     private int submittedMoves;
+    private int completedCount = 0;
+    private float ticksAwaiting = 0.0f;
 
     [SerializeField] private float defaultTurnDuration = 20f; // Keep it for now even if unused
 
@@ -22,14 +26,20 @@ public class TurnManager : MonoBehaviour
     {
         Instance = this;
         Phase = TurnPhase.Planning;
-
-        Application.targetFrameRate = 60; // SET GAME FRAME RATE TO 60 FPS. DO NOT CHANGE
     }
 
     public void ForEachPlayer(Action<CharacterController> callback)
     {
         foreach (PlayerTurnData playerTurnData in players.getList())
             callback(playerTurnData.player);
+    }
+
+    public void ResetState()
+    {
+        foreach (var player_turn_data in players.getList())
+        {
+            player_turn_data.player.Load(player_turn_data.saveData);
+        }
     }
 
     public int RegisterPlayer(CharacterController p)
@@ -39,6 +49,7 @@ public class TurnManager : MonoBehaviour
             return p.id;
         return players.add(new PlayerTurnData{
             player = p,
+            saveData = p.Save(),
         });
     }
 
@@ -54,33 +65,59 @@ public class TurnManager : MonoBehaviour
         if (plr_data.submitted_move == null)
             ++submittedMoves;
         plr_data.submitted_move = p.SelectedMove;
-        if (submittedMoves >= players.getList().Count) // start the round of every player have locked-in (submitted their move)
-            StartCoroutine(SimulateRound());
-    }
-    private IEnumerator SimulateRound()
-    {
-        Phase = TurnPhase.Simulating;
-
-        int completedCount = 0;
-        int totalPlayers = players.getList().Count;
-
-        foreach (var player_turn_data in players.getList())
+        // start the round of every player have locked-in (submitted their move)
+        if (submittedMoves >= players.getList().Count)
         {
-            player_turn_data.player.ExecuteMove(player_turn_data.submitted_move ?? "idle", () => {
-                completedCount++;
-            });
+            Phase = TurnPhase.Simulating;
+            completedCount = 0;
+            foreach (var player_turn_data in players.getList())
+            {
+                player_turn_data.player.ExecuteMove(player_turn_data.submitted_move ?? "idle", () => {
+                    completedCount++;
+                });
+            }
         }
+    }
 
-        // wait until all players finish their animation, CHANGE HERE FOR FRAME LOGIC
-        yield return new WaitUntil(() => completedCount >= totalPlayers);
-
-        Phase = TurnPhase.Resolved;
-
-        // yield return new WaitForSeconds(0.3f);
-
-        submittedMoves = 0;
-        foreach (var player_turn_data in players.getList())
-            player_turn_data.submitted_move = null;
-        Phase = TurnPhase.Planning;
+    private void Update()
+    {
+        switch(Phase)
+        {
+            case TurnPhase.Planning:
+                {
+                    foreach (var player_turn_data in players.getList())
+                    {
+                        if(player_turn_data.submitted_move == null)
+                            player_turn_data.player.RequestDecision();
+                    }
+                    break;
+                }
+            case TurnPhase.Simulating:
+                {
+                    ticksAwaiting += Time.deltaTime;
+                    while (ticksAwaiting > 0)
+                    {
+                        ticksAwaiting -= SECONDS_PER_FRAME;
+                        int totalPlayers = players.getList().Count;
+                        if (completedCount >= totalPlayers)
+                        {
+                            Phase = TurnPhase.Planning;
+                            submittedMoves = 0;
+                            foreach (var player_turn_data in players.getList())
+                            {
+                                player_turn_data.submitted_move = null;
+                                player_turn_data.player.RequestDecision();
+                            }
+                            break;
+                        }
+                        foreach (var player_turn_data in players.getList())
+                        {
+                            player_turn_data.player.Step();
+                        }
+                        HitboxManager.Instance.Step();
+                    }
+                    break;
+                }
+        }
     }
 }

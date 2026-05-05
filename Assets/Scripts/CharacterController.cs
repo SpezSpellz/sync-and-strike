@@ -11,6 +11,14 @@ public class CharacterController : MonoBehaviour
     public int id {  get; private set; }
     public string SelectedMove { get; private set; } = "idle";
 
+    public struct SaveData
+    {
+        public float health;
+        public Vector2 pos;
+        public Vector3 localScale;
+        public Vector2 velocity;
+    }
+
     private void Awake()
     {
         anim = GetComponent<CharacterAnimation>();
@@ -18,7 +26,7 @@ public class CharacterController : MonoBehaviour
         characterData = GetComponent<CharacterData>();
     }
 
-    private void Start()
+    public virtual void Start()
     {
         physics.Initialize(characterData);
         anim.Initialize(characterData.animations, this.onFrameEvent);
@@ -29,7 +37,39 @@ public class CharacterController : MonoBehaviour
     {
         this.characterData.health = Mathf.Max(0, this.characterData.health - damage);
     }
+    public bool IsDead()
+    {
+        return this.characterData.health <= 0;
+    }
 
+    public float GetHealth()
+    {
+        return this.characterData.health;
+    }
+
+    public Vector2 GetPosition()
+    {
+        return this.physics.getPosition();
+    }
+
+    public SaveData Save()
+    {
+        return new SaveData
+        {
+            pos = this.physics.getPosition(),
+            health = this.characterData.health,
+            localScale = this.transform.localScale,
+            velocity = this.physics.getVelocity(),
+        };
+    }
+
+    public void Load(SaveData savedata)
+    {
+        this.physics.setPosition(savedata.pos.x, savedata.pos.y);
+        this.physics.setVelocity(savedata.velocity.x, savedata.velocity.y);
+        this.characterData.health = savedata.health;
+        this.transform.localScale = savedata.localScale;
+    }
     private void onFrameEvent(FrameEventType frameEventType)
     {
         switch (frameEventType)
@@ -71,8 +111,15 @@ public class CharacterController : MonoBehaviour
         );
     }
 
-    private void Update()
+    public virtual void RequestDecision()
     {
+
+    }
+
+    public void Step()
+    {
+        anim.Step();
+        physics.Step();
         HitboxManager.Instance.SubmitHurtBox(this.getHurtBox());
     }
 
@@ -82,11 +129,5 @@ public class CharacterController : MonoBehaviour
         var move = characterData.GetMove(moveId);
         if (move != null)
             physics.ApplyImpulse(move.impulse);
-    }
-
-    void LateUpdate()
-    {
-        if(TurnManager.Instance.Phase == TurnPhase.Simulating)
-            physics.Step();
     }
 }

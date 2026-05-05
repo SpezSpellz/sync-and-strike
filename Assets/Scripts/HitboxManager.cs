@@ -20,7 +20,7 @@ public class HitboxManager : MonoBehaviour
         this.hurtboxes.Add(hurtbox);
     }
 
-    void LateUpdate()
+    public void Step()
     {
         foreach(HitBox hitbox in this.hitboxes)
         {

@@ -22,7 +22,7 @@ public class CharacterAnimation : MonoBehaviour
         this.onFrameEvent = onFrameEvent;
     }
 
-    private void Update()
+    public void Step()
     {
         if (TurnManager.Instance.Phase != TurnPhase.Simulating) return; // If the player is still choosing, don't advance the frame.
         if (current == null) return; // If no animation is loaded, don't advance the frame. SAFE GUARD SINCE IF ANIMATIONDATA ISN'T LOADED PROPERLY UNITY WILL BREAK
