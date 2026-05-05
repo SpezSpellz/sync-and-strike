@@ -619,7 +619,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Unity.ML-Agents::Unity.MLAgents.Policies.BehaviorParameters
   m_BrainParameters:
-    VectorObservationSize: 4
+    VectorObservationSize: 8
     NumStackedVectorObservations: 1
     m_ActionSpec:
       m_NumContinuousActions: 0
@@ -1304,6 +1304,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b17ca5779db507d42abd42dda4dfddc3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HitboxManager
+  hitboxPrefab: {fileID: 5716490138129443718, guid: 669a28518fd19b347ba59d27bcdea055, type: 3}
+  showHitboxes: 0
 --- !u!1 &1386574519
 GameObject:
   m_ObjectHideFlags: 0

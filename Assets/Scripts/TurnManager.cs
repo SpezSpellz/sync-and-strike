@@ -7,6 +7,7 @@ public class TurnManager : MonoBehaviour
     public TurnPhase Phase { get; private set; }
 
     private const float SECONDS_PER_FRAME = 0.016f; // SET GAME FRAME RATE TO 60 FPS. DO NOT CHANGE
+    // private const float SECONDS_PER_FRAME = 0.001f; // SET GAME FRAME RATE TO VERY HIGH FOR TRAINING
 
     class PlayerTurnData
     {

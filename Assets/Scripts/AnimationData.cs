@@ -31,8 +31,10 @@ public struct FrameEvent
 
 public enum FrameEventType
 {
-    BasicAttack,
-    SpawnFX
+    SpawnFX,
+    HorizontalSlash,
+    VerticalSlash,
+    Block
 }
 
 public enum MoveType

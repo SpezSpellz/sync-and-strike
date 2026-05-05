@@ -1,6 +1,7 @@
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Sensors;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class EnemyAgent : Agent
@@ -23,13 +24,20 @@ public class EnemyAgent : Agent
     public override void CollectObservations(VectorSensor sensor)
     {
         sensor.AddObservation(new Vector2(this.transform.position.x, this.transform.position.y));
+        sensor.AddObservation(this.playerController.GetVelocity());
         sensor.AddObservation(target.GetPosition());
+        sensor.AddObservation(target.GetVelocity());
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         this.playerController = GetComponent<CharacterController>();
+        this.ResetDistance();
+    }
+
+    void ResetDistance()
+    {
         this.prevDist = (target.GetPosition() - playerController.GetPosition()).magnitude;
         this.prevHealth = this.playerController.GetHealth();
         this.prevTargetHealth = this.target.GetHealth();
@@ -42,6 +50,7 @@ public class EnemyAgent : Agent
             AddReward(-10);
             EndEpisode();
             TurnManager.Instance.ResetState();
+            this.ResetDistance();
             return;
         }
         AddReward(this.playerController.GetHealth() - this.prevHealth);
@@ -50,6 +59,8 @@ public class EnemyAgent : Agent
         this.prevTargetHealth = this.target.GetHealth();
         var cd = (this.target.GetPosition() - playerController.GetPosition()).magnitude;
         AddReward(this.prevDist - cd);
+        // Prevent stalling
+        AddReward(-0.03f);
         this.prevDist = cd;
         this.RequestDecision();
     }

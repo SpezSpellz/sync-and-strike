@@ -52,6 +52,11 @@ public class CharacterController : MonoBehaviour
         return this.physics.getPosition();
     }
 
+    public Vector2 GetVelocity()
+    {
+        return this.physics.getVelocity();
+    }
+
     public SaveData Save()
     {
         return new SaveData
@@ -74,17 +79,39 @@ public class CharacterController : MonoBehaviour
     {
         switch (frameEventType)
         {
-            case FrameEventType.BasicAttack:
+            case FrameEventType.HorizontalSlash:
                 HitboxManager.Instance.SubmitHitBox(
                     new HitBox(
                         this,
-                        (target) => target.Damage(10),
-                        transform.position.x - this.characterData.width / 1.2f,
-                        transform.position.y - this.characterData.height / 2f,
-                        transform.position.x + this.characterData.width / 1.2f,
-                        transform.position.y + this.characterData.height / 2f
+                        (target) =>
+                        {
+                            target.physics.ApplyKnockback(new Vector2(0.5f * this.physics.FacingDirection().x, 0f));
+                            target.Damage(10);
+                        },
+                        transform.position.x + this.physics.FacingDirection().x - 0.7f,
+                        transform.position.y - 0.1f,
+                        transform.position.x + this.physics.FacingDirection().x + 0.7f,
+                        transform.position.y + 0.1f
                     )
                 );
+                break;
+            case FrameEventType.VerticalSlash:
+                HitboxManager.Instance.SubmitHitBox(
+                    new HitBox(
+                        this,
+                        (target) => {
+                            target.physics.ApplyKnockback(new Vector2(0.3f * this.physics.FacingDirection().x, 0.2f));
+                            target.Damage(10);
+                        },
+                        transform.position.x + this.physics.FacingDirection().x - 0.7f,
+                        transform.position.y - 0.5f,
+                        transform.position.x + this.physics.FacingDirection().x + 0.7f,
+                        transform.position.y + 0.9f
+                    )
+                );
+                break;
+            case FrameEventType.Block:
+                
                 break;
         }
     }
@@ -104,10 +131,10 @@ public class CharacterController : MonoBehaviour
     {
         return new HurtBox(
             this,
-            transform.position.x - this.characterData.width / 2.5f,
-            transform.position.y - this.characterData.height / 2.5f,
-            transform.position.x + this.characterData.width / 2.5f,
-            transform.position.y + this.characterData.height / 2.5f
+            transform.position.x - this.characterData.width / 2f,
+            transform.position.y - this.characterData.height / 2f,
+            transform.position.x + this.characterData.width / 2f,
+            transform.position.y + this.characterData.height / 2f
         );
     }
 
