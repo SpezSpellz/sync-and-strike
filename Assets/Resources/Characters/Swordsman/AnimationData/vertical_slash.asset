@@ -38,7 +38,5 @@ MonoBehaviour:
   events:
   - frame: 11
     type: 2
-  - frame: 13
-    type: 1
   impulse: {x: 0.3, y: 0}
   knockback: 0

@@ -88,9 +88,9 @@ public class CharacterController : MonoBehaviour
                             target.physics.ApplyKnockback(new Vector2(0.5f * this.physics.FacingDirection().x, 0f));
                             target.Damage(10);
                         },
-                        transform.position.x + this.physics.FacingDirection().x - 0.7f,
+                        transform.position.x + this.physics.FacingDirection().x * 1.4f - 1f,
                         transform.position.y - 0.1f,
-                        transform.position.x + this.physics.FacingDirection().x + 0.7f,
+                        transform.position.x + this.physics.FacingDirection().x * 1.4f + 1f,
                         transform.position.y + 0.1f
                     )
                 );
