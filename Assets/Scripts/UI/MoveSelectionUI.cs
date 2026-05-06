@@ -8,7 +8,7 @@ public class MoveSelectionUI : MonoBehaviour
     [SerializeField] private GameObject moveColumnPrefab;
     [SerializeField] private GameObject confirmColumnPrefab;
     [SerializeField] private GameObject textButtonPrefab;
-    [SerializeField] private GameObject flipPrefab;
+    [SerializeField] private GameObject toggleButtonPrefab;
 
 
     private Transform columnMovement;
@@ -30,17 +30,21 @@ public class MoveSelectionUI : MonoBehaviour
 
     private void Start()
     {
+        // confirm column
         GridLayoutGroup columnConfirm = Instantiate(confirmColumnPrefab, transform).GetComponent<UnityEngine.UI.GridLayoutGroup>();
         columnConfirm.gameObject.name = "Confirm";
         columnConfirm.cellSize = new Vector2(confirmColumnWidth, confirmButtonHeight);
         columnConfirm.spacing = new Vector2(0, 5);
 
+        // lock in button
         GameObject lockInButtonObj = Instantiate(textButtonPrefab, columnConfirm.transform);
         lockInButtonObj.GetComponentInChildren<TextMeshProUGUI>().text = "Lock In";
 
         lockInButtonObj.AddComponent<LockIn>();
 
-        GameObject flipToggleObj = Instantiate(flipPrefab, columnConfirm.transform);
+        // flip button
+        GameObject flipToggleObj = Instantiate(toggleButtonPrefab, columnConfirm.transform);
+        flipToggleObj.GetComponentInChildren<TextMeshProUGUI>().text = "Flip";
 
         flipToggleObj.AddComponent<Flip>();
 

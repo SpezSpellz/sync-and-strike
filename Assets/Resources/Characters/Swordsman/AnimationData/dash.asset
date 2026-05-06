@@ -17,7 +17,7 @@ MonoBehaviour:
   moveName: Dash
   icon: {fileID: -7848039375673857549, guid: 0b40fc3d9c4487143804b43d851a7800, type: 3}
   frames:
-  - {fileID: 7110878671101974141, guid: 04dd565d3f46b414ca3ba3c130551d71, type: 3}
+  - {fileID: -1291688497, guid: 04dd565d3f46b414ca3ba3c130551d71, type: 3}
   loop: 0
   events: []
   impulse: {x: 0, y: 0}

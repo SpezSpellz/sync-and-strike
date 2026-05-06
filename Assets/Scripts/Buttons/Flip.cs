@@ -4,12 +4,11 @@ using UnityEngine.UI;
 public class Flip : MonoBehaviour
 {
     private Toggle toggle;
+    private PlayerController player;
 
     private void Start()
     {
         toggle = GetComponent<Toggle>();
-
-        Debug.Log("Toggle component: " + toggle);
 
         if (toggle == null)
         {
@@ -17,14 +16,43 @@ public class Flip : MonoBehaviour
             return;
         }
 
+        player = FindFirstObjectByType<PlayerController>();
+
         toggle.onValueChanged.AddListener(OnFlipButtonPressed);
+
+        // apply initial visual
+        UpdateVisual(toggle.isOn);
     }
 
-    private void OnFlipButtonPressed(bool active)
+    private void OnFlipButtonPressed(bool isOn)
     {
-        if (TurnManager.Instance.Phase != TurnPhase.Planning) return;
+        // revert if not in planning phase
+        if (TurnManager.Instance.Phase != TurnPhase.Planning)
+        {
+            toggle.isOn = !isOn;
+            return;
+        }
 
-        PlayerController player = FindFirstObjectByType<PlayerController>();
-        player.Flip(active);
+        player.Flip(isOn);
+        UpdateVisual(isOn);
+    }
+
+    private void UpdateVisual(bool isOn)
+    {
+        var colors = UIManager.Colors;
+
+        Color baseColor = isOn ? colors.toggleOn : colors.toggleOff;
+
+        Debug.Log("Color is" + baseColor);
+
+        ColorBlock cb = toggle.colors;
+        cb.normalColor = baseColor;
+        cb.highlightedColor = baseColor;
+        cb.pressedColor = colors.toggleOn;
+        cb.selectedColor = baseColor;
+        cb.disabledColor = colors.disabled;
+        cb.colorMultiplier = 1f;
+
+        toggle.colors = cb;
     }
 }

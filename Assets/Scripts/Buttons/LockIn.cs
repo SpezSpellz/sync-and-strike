@@ -9,14 +9,13 @@ public class LockIn : MonoBehaviour
     {
         button = GetComponent<Button>();
 
-        Debug.Log("Button component: " + button);
-
         if (button == null)
         {
             Debug.LogError("Button is NULL on: " + gameObject.name);
             return;
         }
 
+        button.image.color = UIManager.Colors.toggleOff;
         button.onClick.AddListener(OnLockInButtonPressed);
     }
 
@@ -26,5 +25,9 @@ public class LockIn : MonoBehaviour
 
         PlayerController player = FindFirstObjectByType<PlayerController>();
         TurnManager.Instance.SubmitMove(player);
+        button.image.color = UIManager.Colors.toggleOn;
+
+        // assuming the turn is done
+        button.image.color = UIManager.Colors.toggleOff;
     }
 }
