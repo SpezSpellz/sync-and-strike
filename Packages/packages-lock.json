@@ -195,9 +195,9 @@
       "url": "https://packages.unity.com"
     },
     "com.unity.ml-agents": {
-      "version": "file:D:/Unity Projects/ml-agents/com.unity.ml-agents",
+      "version": "file:com.unity.ml-agents",
       "depth": 0,
-      "source": "local",
+      "source": "embedded",
       "dependencies": {
         "com.unity.ai.inference": "2.6.1",
         "com.unity.modules.imageconversion": "1.0.0",
