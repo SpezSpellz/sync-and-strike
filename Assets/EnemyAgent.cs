@@ -10,9 +10,10 @@ public class EnemyAgent : Agent
     private CharacterController target;
     private CharacterController playerController;
     private static string[] moves = { "block", "dash", "horizontal_slash", "idle", "jump", "super_jump", "vertical_slash", "walkf" };
-    private float prevDist = 0;
+    private float prevDist;
     private float prevHealth;
     private float prevTargetHealth;
+    private int decisionCount;
     public override void OnActionReceived(ActionBuffers actions)
     {
         var flip = actions.DiscreteActions[0] == 0;
@@ -33,24 +34,25 @@ public class EnemyAgent : Agent
     void Start()
     {
         this.playerController = GetComponent<CharacterController>();
-        this.ResetDistance();
+        this.ResetMetrics();
     }
 
-    void ResetDistance()
+    public void ResetMetrics()
     {
         this.prevDist = (target.GetPosition() - playerController.GetPosition()).magnitude;
         this.prevHealth = this.playerController.GetHealth();
         this.prevTargetHealth = this.target.GetHealth();
+        this.decisionCount = 0;
+        AddReward(10);
+        EndEpisode();
     }
 
     public void MakeDecision()
     {
-        if(this.playerController.IsDead())
+        if(this.playerController.IsDead() || this.decisionCount > 800)
         {
-            AddReward(-10);
-            EndEpisode();
+            AddReward(-20);
             TurnManager.Instance.ResetState();
-            this.ResetDistance();
             return;
         }
         AddReward(this.playerController.GetHealth() - this.prevHealth);

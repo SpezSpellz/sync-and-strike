@@ -6,6 +6,12 @@
         base.Start();
         agent = GetComponent<EnemyAgent>();
     }
+
+    public void ResetMetrics()
+    {
+        agent.ResetMetrics();
+    }
+
     public override void RequestDecision()
     {
         this.agent.MakeDecision();

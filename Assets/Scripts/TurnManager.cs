@@ -9,6 +9,9 @@ public class TurnManager : MonoBehaviour
     private const float SECONDS_PER_FRAME = 0.016f; // SET GAME FRAME RATE TO 60 FPS. DO NOT CHANGE
     // private const float SECONDS_PER_FRAME = 0.001f; // SET GAME FRAME RATE TO VERY HIGH FOR TRAINING
 
+    [SerializeField]
+    private bool fastForward;
+
     class PlayerTurnData
     {
         public CharacterController player;
@@ -40,6 +43,12 @@ public class TurnManager : MonoBehaviour
         foreach (var player_turn_data in players.getList())
         {
             player_turn_data.player.Load(player_turn_data.saveData);
+        }
+        // Must come after load of other players
+        foreach (var player_turn_data in players.getList())
+        {
+            if (player_turn_data.player is EnemyController agent)
+                agent.ResetMetrics();
         }
     }
 
@@ -95,8 +104,9 @@ public class TurnManager : MonoBehaviour
                 }
             case TurnPhase.Simulating:
                 {
+                    int count = 0;
                     ticksAwaiting += Time.deltaTime;
-                    while (ticksAwaiting > 0)
+                    while (ticksAwaiting > 0 || (fastForward && ++count < 100))
                     {
                         ticksAwaiting -= SECONDS_PER_FRAME;
                         int totalPlayers = players.getList().Count;
