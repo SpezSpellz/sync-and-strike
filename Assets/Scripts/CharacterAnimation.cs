@@ -1,26 +1,28 @@
+using System;
 using UnityEngine;
 
 public class CharacterAnimation : MonoBehaviour
 {
     private AnimationData[] animations;
     [SerializeField] private SpriteRenderer spriteRenderer;
-    [SerializeField] private HitboxController hitbox;
+    private Action<FrameEventType> onFrameEvent;
 
     private AnimationData current;
     private int currentFrame;
-    private System.Action onAnimationComplete;
+    private Action onAnimationComplete;
 
     private void Awake()
     {
         Debug.Log($"SpriteRenderer: {spriteRenderer}");
     }
 
-    public void Initialize(AnimationData[] data)
+    public void Initialize(AnimationData[] data, Action<FrameEventType> onFrameEvent)
     {
         animations = data;
+        this.onFrameEvent = onFrameEvent;
     }
 
-    private void Update()
+    public void Step()
     {
         if (TurnManager.Instance.Phase != TurnPhase.Simulating) return; // If the player is still choosing, don't advance the frame.
         if (current == null) return; // If no animation is loaded, don't advance the frame. SAFE GUARD SINCE IF ANIMATIONDATA ISN'T LOADED PROPERLY UNITY WILL BREAK
@@ -30,7 +32,7 @@ public class CharacterAnimation : MonoBehaviour
         AdvanceFrame();
     }
 
-    public void PlayMove(string moveId, System.Action onComplete = null)
+    public void PlayMove(string moveId, Action onComplete = null)
     {
         foreach (var anim in animations)
         {
@@ -69,7 +71,7 @@ public class CharacterAnimation : MonoBehaviour
             foreach (var e in current.events)
             {
                 if (e.frame == currentFrame)
-                    HandleEvent(e.type);
+                    this.onFrameEvent(e.type);
             }
         }
 
@@ -78,18 +80,5 @@ public class CharacterAnimation : MonoBehaviour
             return;
 
         currentFrame++;
-    }
-
-    private void HandleEvent(FrameEventType type)
-    {
-        switch (type)
-        {
-            case FrameEventType.ActivateHitbox:
-                hitbox?.Activate();
-                break;
-            case FrameEventType.DeactivateHitbox:
-                hitbox?.Deactivate();
-                break;
-        }
     }
 }

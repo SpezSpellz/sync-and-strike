@@ -11,6 +11,14 @@ public class CharacterController : MonoBehaviour
     public int id {  get; private set; }
     public string SelectedMove { get; private set; } = "idle";
 
+    public struct SaveData
+    {
+        public float health;
+        public Vector2 pos;
+        public Vector3 localScale;
+        public Vector2 velocity;
+    }
+
     private void Awake()
     {
         anim = GetComponent<CharacterAnimation>();
@@ -18,11 +26,94 @@ public class CharacterController : MonoBehaviour
         characterData = GetComponent<CharacterData>();
     }
 
-    private void Start()
+    public virtual void Start()
     {
         physics.Initialize(characterData);
-        anim.Initialize(characterData.animations);
+        anim.Initialize(characterData.animations, this.onFrameEvent);
         this.id = TurnManager.Instance.RegisterPlayer(this);
+    }
+
+    public void Damage(float damage)
+    {
+        this.characterData.health = Mathf.Max(0, this.characterData.health - damage);
+    }
+    public bool IsDead()
+    {
+        return this.characterData.health <= 0;
+    }
+
+    public float GetHealth()
+    {
+        return this.characterData.health;
+    }
+
+    public Vector2 GetPosition()
+    {
+        return this.physics.getPosition();
+    }
+
+    public Vector2 GetVelocity()
+    {
+        return this.physics.getVelocity();
+    }
+
+    public SaveData Save()
+    {
+        return new SaveData
+        {
+            pos = this.physics.getPosition(),
+            health = this.characterData.health,
+            localScale = this.transform.localScale,
+            velocity = this.physics.getVelocity(),
+        };
+    }
+
+    public void Load(SaveData savedata)
+    {
+        this.physics.setPosition(savedata.pos.x, savedata.pos.y);
+        this.physics.setVelocity(savedata.velocity.x, savedata.velocity.y);
+        this.characterData.health = savedata.health;
+        this.transform.localScale = savedata.localScale;
+    }
+    private void onFrameEvent(FrameEventType frameEventType)
+    {
+        switch (frameEventType)
+        {
+            case FrameEventType.HorizontalSlash:
+                HitboxManager.Instance.SubmitHitBox(
+                    new HitBox(
+                        this,
+                        (target) =>
+                        {
+                            target.physics.ApplyKnockback(new Vector2(0.5f * this.physics.FacingDirection().x, 0f));
+                            target.Damage(10);
+                        },
+                        transform.position.x + this.physics.FacingDirection().x - 0.7f,
+                        transform.position.y - 0.1f,
+                        transform.position.x + this.physics.FacingDirection().x + 0.7f,
+                        transform.position.y + 0.1f
+                    )
+                );
+                break;
+            case FrameEventType.VerticalSlash:
+                HitboxManager.Instance.SubmitHitBox(
+                    new HitBox(
+                        this,
+                        (target) => {
+                            target.physics.ApplyKnockback(new Vector2(0.3f * this.physics.FacingDirection().x, 0.2f));
+                            target.Damage(10);
+                        },
+                        transform.position.x + this.physics.FacingDirection().x - 0.7f,
+                        transform.position.y - 0.5f,
+                        transform.position.x + this.physics.FacingDirection().x + 0.7f,
+                        transform.position.y + 0.9f
+                    )
+                );
+                break;
+            case FrameEventType.Block:
+                
+                break;
+        }
     }
 
     public void SelectMove(string moveId)
@@ -36,6 +127,28 @@ public class CharacterController : MonoBehaviour
         if(flipped != transform.localScale.x < 0)
             transform.localScale = transform.localScale - new Vector3(transform.localScale.x * 2, 0, 0);
     }
+    public HurtBox getHurtBox()
+    {
+        return new HurtBox(
+            this,
+            transform.position.x - this.characterData.width / 2f,
+            transform.position.y - this.characterData.height / 2f,
+            transform.position.x + this.characterData.width / 2f,
+            transform.position.y + this.characterData.height / 2f
+        );
+    }
+
+    public virtual void RequestDecision()
+    {
+
+    }
+
+    public void Step()
+    {
+        anim.Step();
+        physics.Step();
+        HitboxManager.Instance.SubmitHurtBox(this.getHurtBox());
+    }
 
     public void ExecuteMove(string moveId, System.Action onComplete = null)
     {
@@ -43,6 +156,5 @@ public class CharacterController : MonoBehaviour
         var move = characterData.GetMove(moveId);
         if (move != null)
             physics.ApplyImpulse(move.impulse);
-        physics.Step();
     }
 }

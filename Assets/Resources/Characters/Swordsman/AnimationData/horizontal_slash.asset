@@ -28,7 +28,7 @@ MonoBehaviour:
   loop: 0
   events:
   - frame: 6
-    type: 0
+    type: 1
   - frame: 8
     type: 1
   impulse: {x: 0.3, y: 0}

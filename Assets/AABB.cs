@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 public class AABB
@@ -85,5 +86,11 @@ public class AABB
         if (!float.IsNaN(inter.Distance))
             return inter;
         return new RayHit { Distance = float.PositiveInfinity };
+    }
+
+    public bool intersectWith(AABB other)
+    {
+        return (this.minX <= other.maxX && this.maxX >= other.minX) &&
+         (this.minY <= other.maxY && this.maxY >= other.minY);
     }
 }

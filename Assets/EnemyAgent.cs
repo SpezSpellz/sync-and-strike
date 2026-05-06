@@ -1,16 +1,18 @@
-using NUnit.Framework;
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Sensors;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class EnemyAgent : Agent
 {
     [SerializeField]
-    private Transform target;
+    private CharacterController target;
     private CharacterController playerController;
     private static string[] moves = { "block", "dash", "horizontal_slash", "idle", "jump", "super_jump", "vertical_slash", "walkf" };
     private float prevDist = 0;
+    private float prevHealth;
+    private float prevTargetHealth;
     public override void OnActionReceived(ActionBuffers actions)
     {
         var flip = actions.DiscreteActions[0] == 0;
@@ -22,25 +24,43 @@ public class EnemyAgent : Agent
     public override void CollectObservations(VectorSensor sensor)
     {
         sensor.AddObservation(new Vector2(this.transform.position.x, this.transform.position.y));
-        sensor.AddObservation(new Vector2(this.target.position.x, this.target.position.y));
+        sensor.AddObservation(this.playerController.GetVelocity());
+        sensor.AddObservation(target.GetPosition());
+        sensor.AddObservation(target.GetVelocity());
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         this.playerController = GetComponent<CharacterController>();
-        this.prevDist = (this.target.position-this.transform.position).magnitude;
+        this.ResetDistance();
     }
 
-    // Update is called once per frame
-    void Update()
+    void ResetDistance()
     {
-        if (TurnManager.Instance.Phase != TurnPhase.Planning)
+        this.prevDist = (target.GetPosition() - playerController.GetPosition()).magnitude;
+        this.prevHealth = this.playerController.GetHealth();
+        this.prevTargetHealth = this.target.GetHealth();
+    }
+
+    public void MakeDecision()
+    {
+        if(this.playerController.IsDead())
+        {
+            AddReward(-10);
+            EndEpisode();
+            TurnManager.Instance.ResetState();
+            this.ResetDistance();
             return;
-        if (TurnManager.Instance.IsSubmitted(playerController))
-            return;
-        var cd = (this.target.position - this.transform.position).magnitude;
+        }
+        AddReward(this.playerController.GetHealth() - this.prevHealth);
+        this.prevHealth = this.playerController.GetHealth();
+        AddReward(this.prevTargetHealth - this.target.GetHealth());
+        this.prevTargetHealth = this.target.GetHealth();
+        var cd = (this.target.GetPosition() - playerController.GetPosition()).magnitude;
         AddReward(this.prevDist - cd);
+        // Prevent stalling
+        AddReward(-0.03f);
         this.prevDist = cd;
         this.RequestDecision();
     }

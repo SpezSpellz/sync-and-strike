@@ -63,10 +63,10 @@ public class CharacterPhysics : PhysicsCollider
     public override void Step()
     {
         PhysicsManager.Instance.StepFor(this);
-        this.veloX /= 10;
+        this.veloX *= 0.8f;
     }
 
-    private Vector2 FacingDirection()
+    public Vector2 FacingDirection()
     {
         return transform.localScale.x > 0 ? Vector2.right : Vector2.left;
     }
