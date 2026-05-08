@@ -17,10 +17,11 @@ public class CharacterPhysics : PhysicsCollider
         veloX += impulse.x * direction.x;
         veloY += impulse.y;
     }
-    public void ApplyKnockback(Vector2 knockback)
+
+    public void AddVelocity(Vector2 velocity)
     {
-        veloX += knockback.x;
-        veloY += knockback.y;
+        veloX += velocity.x;
+        veloY += velocity.y;
     }
 
     public override AABB getBoundingBox()

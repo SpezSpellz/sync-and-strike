@@ -51,7 +51,8 @@ public enum FrameEventType
     SpawnHitbox,
     SpawnVFX,
     SpawnSFX,
-    Block
+    Block,
+    Jump
 }
 
 public enum MoveType

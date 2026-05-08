@@ -22,5 +22,5 @@ MonoBehaviour:
   events: []
   firstActionable: 10
   continuousImpulse: 0
-  impulse: {x: 0.2, y: 0}
+  impulse: {x: 0.5, y: 0.1}
   knockback: 0

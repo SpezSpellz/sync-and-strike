@@ -8,8 +8,33 @@ public class CharacterController : MonoBehaviour
     private CharacterAnimation anim;
     private CharacterPhysics physics;
     private CharacterData characterData;
+    private bool blocking = false;
     public int id {  get; private set; }
     public string SelectedMove { get; private set; } = "idle";
+    public float JumpDirection { get; private set; } = 1.5707963267948966f;
+    public float JumpPower { get; private set; } = 1;
+    public float KnockbackIndirectionDirection { get; private set; } = 0;
+    public float KnockbackIndirectionPower { get; private set; } = 0;
+
+    // Direction in radians
+    public void setJumpInfo(float power, float direction)
+    {
+        this.JumpPower = Mathf.Clamp(power, 0.5f, 1f);
+        // 30 degrees clamp
+        this.JumpDirection = Mathf.Clamp(direction, 0.5235987755982988f, 2.6179938779914944f);
+    }
+
+    // Direction in radians
+    public void setKnockbackInfo(float power, float direction)
+    {
+        this.KnockbackIndirectionPower = power;
+        this.KnockbackIndirectionDirection = direction;
+    }
+
+    public void ApplyKnockback(Vector2 knockback)
+    {
+        this.physics.AddVelocity(knockback + (new Vector2(Mathf.Cos(KnockbackIndirectionDirection), Mathf.Sin(KnockbackIndirectionDirection))) * (KnockbackIndirectionPower * knockback.magnitude * 0.98f));
+    }
 
     public struct SaveData
     {
@@ -82,6 +107,9 @@ public class CharacterController : MonoBehaviour
             case FrameEventType.SpawnHitbox:
                 SpawnHitbox(frameEvent.hitboxData);
                 break;
+            case FrameEventType.Jump:
+                this.physics.AddVelocity(new Vector2(Mathf.Cos(JumpDirection), Mathf.Sin(JumpDirection)) * JumpPower * 0.12f);
+                break;
             case FrameEventType.SpawnVFX:
                 // read from data later
                 break;
@@ -89,7 +117,7 @@ public class CharacterController : MonoBehaviour
                 // read from data later
                 break;
             case FrameEventType.Block:
-                // maybe trigger block stun here or something? for now just a placeholder
+                this.blocking = true;
                 break;
         }
     }
@@ -110,7 +138,7 @@ public class CharacterController : MonoBehaviour
                 this,
                 (target) =>
                 {
-                    target.physics.ApplyKnockback(new Vector2(data.knockback.x * facing, data.knockback.y));
+                    target.ApplyKnockback(new Vector2(data.knockback.x * facing, data.knockback.y));
                     target.Damage(data.damage);
                 },
                 minX, minY, maxX, maxY
@@ -147,6 +175,8 @@ public class CharacterController : MonoBehaviour
 
     public void Step()
     {
+        if(this.SelectedMove != "block")
+            this.blocking = false;
         anim.Step();
         physics.Step();
         HitboxManager.Instance.SubmitHurtBox(this.getHurtBox());
