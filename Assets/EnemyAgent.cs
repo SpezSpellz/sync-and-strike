@@ -19,17 +19,17 @@ public class EnemyAgent : Agent
         var flip = actions.DiscreteActions[0] == 0;
         playerController.Flip(flip);
         playerController.SelectMove(moves[actions.DiscreteActions[1]]);
-        playerController.setKnockbackInfo(actions.ContinuousActions[0], actions.ContinuousActions[1]);
-        playerController.setJumpInfo(actions.ContinuousActions[2], actions.ContinuousActions[3]);
+        playerController.setKnockbackInfo((actions.ContinuousActions[0] + 1f)/2f, (actions.ContinuousActions[1] + 1f) * 3.141592653589793f);
+        playerController.setJumpInfo((actions.ContinuousActions[2] + 3f) / 2f, (actions.ContinuousActions[3] + 1f) * 1.5707963267948966f);
         TurnManager.Instance.SubmitMove(playerController);
     }
 
     public override void CollectObservations(VectorSensor sensor)
     {
-        sensor.AddObservation(new Vector2(this.transform.position.x, this.transform.position.y));
-        sensor.AddObservation(this.playerController.GetVelocity());
-        sensor.AddObservation(target.GetPosition());
-        sensor.AddObservation(target.GetVelocity());
+        sensor.AddObservation(new Vector2(this.transform.position.x, this.transform.position.y) / 10f);
+        sensor.AddObservation(this.playerController.GetVelocity() / 10f);
+        sensor.AddObservation(target.GetPosition() / 10f);
+        sensor.AddObservation(target.GetVelocity() / 10f);
     }
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
