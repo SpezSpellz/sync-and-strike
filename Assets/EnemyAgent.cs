@@ -19,6 +19,8 @@ public class EnemyAgent : Agent
         var flip = actions.DiscreteActions[0] == 0;
         playerController.Flip(flip);
         playerController.SelectMove(moves[actions.DiscreteActions[1]]);
+        playerController.setKnockbackInfo(actions.ContinuousActions[0], actions.ContinuousActions[1]);
+        playerController.setJumpInfo(actions.ContinuousActions[2], actions.ContinuousActions[3]);
         TurnManager.Instance.SubmitMove(playerController);
     }
 

@@ -17,6 +17,8 @@ public class RandomEnemyController : CharacterController
             return;
         }
         this.Flip(random.Next(100) < 50);
+        this.setKnockbackInfo((random.Next(100) / 100f), random.Next(360) * 0.017453292519943295f);
+        this.setJumpInfo((random.Next(100) / 200f) + 0.5f, random.Next(360) * 0.017453292519943295f);
         SelectMove(moves[random.Next(moves.Length - 1)]);
         TurnManager.Instance.SubmitMove(this);
     }

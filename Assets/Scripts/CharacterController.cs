@@ -27,8 +27,8 @@ public class CharacterController : MonoBehaviour
     // Direction in radians
     public void setKnockbackInfo(float power, float direction)
     {
-        this.KnockbackIndirectionPower = power;
-        this.KnockbackIndirectionDirection = direction;
+        this.KnockbackIndirectionPower = Mathf.Clamp(power, 0f, 1f);
+        this.KnockbackIndirectionDirection = Mathf.Clamp(direction, 0f, 6.283185307179586f);
     }
 
     public void ApplyKnockback(Vector2 knockback)
