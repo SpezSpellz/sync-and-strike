@@ -22,5 +22,6 @@ MonoBehaviour:
   events:
   - frame: 0
     type: 3
+  firstActionable: 5
   impulse: {x: 0, y: 0}
   knockback: 0

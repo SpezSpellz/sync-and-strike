@@ -20,5 +20,6 @@ MonoBehaviour:
   - {fileID: -3803549920350246036, guid: 7d348868cf6199c4b88f14bdaf027d6a, type: 3}
   loop: 0
   events: []
+  firstActionable: 13
   impulse: {x: 0, y: 0}
   knockback: 0

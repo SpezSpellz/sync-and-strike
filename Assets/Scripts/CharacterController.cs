@@ -75,45 +75,47 @@ public class CharacterController : MonoBehaviour
         this.characterData.health = savedata.health;
         this.transform.localScale = savedata.localScale;
     }
-    private void onFrameEvent(FrameEventType frameEventType)
+    private void onFrameEvent(FrameEvent frameEvent)
     {
-        switch (frameEventType)
+        switch (frameEvent.type)
         {
-            case FrameEventType.HorizontalSlash:
-                HitboxManager.Instance.SubmitHitBox(
-                    new HitBox(
-                        this,
-                        (target) =>
-                        {
-                            target.physics.ApplyKnockback(new Vector2(0.5f * this.physics.FacingDirection().x, 0f));
-                            target.Damage(10);
-                        },
-                        transform.position.x + this.physics.FacingDirection().x * 1.4f - 1f,
-                        transform.position.y - 0.1f,
-                        transform.position.x + this.physics.FacingDirection().x * 1.4f + 1f,
-                        transform.position.y + 0.1f
-                    )
-                );
+            case FrameEventType.SpawnHitbox:
+                SpawnHitbox(frameEvent.hitboxData);
                 break;
-            case FrameEventType.VerticalSlash:
-                HitboxManager.Instance.SubmitHitBox(
-                    new HitBox(
-                        this,
-                        (target) => {
-                            target.physics.ApplyKnockback(new Vector2(0.3f * this.physics.FacingDirection().x, 0.2f));
-                            target.Damage(10);
-                        },
-                        transform.position.x + this.physics.FacingDirection().x - 0.7f,
-                        transform.position.y - 0.5f,
-                        transform.position.x + this.physics.FacingDirection().x + 0.7f,
-                        transform.position.y + 0.9f
-                    )
-                );
+            case FrameEventType.SpawnVFX:
+                // read from data later
+                break;
+            case FrameEventType.SpawnSFX:
+                // read from data later
                 break;
             case FrameEventType.Block:
-                
+                // maybe trigger block stun here or something? for now just a placeholder
                 break;
         }
+    }
+
+    private void SpawnHitbox(HitboxData data)
+    {
+        if (data.damage == 0 && data.knockback == Vector2.zero) return;
+
+        float facing = physics.FacingDirection().x;
+
+        float minX = transform.position.x + facing * data.offsetX - data.width * 0.5f;
+        float maxX = transform.position.x + facing * data.offsetX + data.width * 0.5f;
+        float minY = transform.position.y + data.offsetY - data.height * 0.5f;
+        float maxY = transform.position.y + data.offsetY + data.height * 0.5f;
+
+        HitboxManager.Instance.SubmitHitBox(
+            new HitBox(
+                this,
+                (target) =>
+                {
+                    target.physics.ApplyKnockback(new Vector2(data.knockback.x * facing, data.knockback.y));
+                    target.Damage(data.damage);
+                },
+                minX, minY, maxX, maxY
+            )
+        );
     }
 
     public void SelectMove(string moveId)

@@ -37,6 +37,14 @@ MonoBehaviour:
   loop: 0
   events:
   - frame: 11
-    type: 2
+    type: 0
+    hitboxData:
+      offsetX: 1
+      offsetY: 0.2
+      width: 1.4
+      height: 1.4
+      damage: 10
+      knockback: {x: 0.3, y: 0.1}
+  firstActionable: 19
   impulse: {x: 0.3, y: 0}
   knockback: 0

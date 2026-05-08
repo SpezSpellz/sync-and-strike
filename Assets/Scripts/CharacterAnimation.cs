@@ -5,10 +5,11 @@ public class CharacterAnimation : MonoBehaviour
 {
     private AnimationData[] animations;
     [SerializeField] private SpriteRenderer spriteRenderer;
-    private Action<FrameEventType> onFrameEvent;
+    private Action<FrameEvent> onFrameEvent;
 
     private AnimationData current;
-    private int currentFrame;
+    private int currentFrame;   
+    private int frameCounter = 1;
     private Action onAnimationComplete;
 
     private void Awake()
@@ -16,7 +17,7 @@ public class CharacterAnimation : MonoBehaviour
         Debug.Log($"SpriteRenderer: {spriteRenderer}");
     }
 
-    public void Initialize(AnimationData[] data, Action<FrameEventType> onFrameEvent)
+    public void Initialize(AnimationData[] data, Action<FrameEvent> onFrameEvent)
     {
         animations = data;
         this.onFrameEvent = onFrameEvent;
@@ -28,7 +29,7 @@ public class CharacterAnimation : MonoBehaviour
         if (current == null) return; // If no animation is loaded, don't advance the frame. SAFE GUARD SINCE IF ANIMATIONDATA ISN'T LOADED PROPERLY UNITY WILL BREAK
         if (current.frames.Length == 0) return; // If an animationData exists but has no sprites in the frames array.
 
-        Debug.Log($"Update — current: {current.moveId}, frame: {currentFrame}/{current.frames.Length}");
+        Debug.Log($"Update — current: {current.moveId}, frame: {currentFrame}/{current.frames.Length}, frameCounter: {frameCounter}/{current.firstActionable}");
         AdvanceFrame();
     }
 
@@ -50,12 +51,19 @@ public class CharacterAnimation : MonoBehaviour
 
     private void AdvanceFrame()
     {
-        if (currentFrame >= current.frames.Length)
+
+        if (currentFrame >= current.frames.Length) // If we've reached the end of the animation
         {
             if (current.loop)
                 currentFrame = 0;
+            else if (frameCounter < current.firstActionable) // If we've reached the end of a non-looping animation but haven't hit the first actionable frame, dont advance
+            {
+                frameCounter++;
+                return; // return without going to the next frame (for block)
+            }
             else
             {
+                frameCounter = 1;
                 onAnimationComplete?.Invoke();
                 onAnimationComplete = null;
                 PlayMove("idle");
@@ -71,11 +79,11 @@ public class CharacterAnimation : MonoBehaviour
             foreach (var e in current.events)
             {
                 if (e.frame == currentFrame)
-                    this.onFrameEvent(e.type);
+                    this.onFrameEvent(e); // pass full event data so we can use hitboxData for SpawnHitbox events
             }
         }
 
-        // only advance if not on last frame of a looping animation with 1 frame
+        // return if the animation is looping and we're at the last frame, otherwise advance to the next frame
         if (current.loop && currentFrame == current.frames.Length - 1)
             return;
 

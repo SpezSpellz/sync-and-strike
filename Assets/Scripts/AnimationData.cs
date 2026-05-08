@@ -17,23 +17,39 @@ public class AnimationData : ScriptableObject
     [Header("Frame Events")]
     public FrameEvent[] events;
 
+    // Start from frame 1 not 0
+    [Header("Frame Data")]
+    public int firstActionable;
+
     [Header("Physics")]
     public Vector2 impulse;
     public float knockback;
 }
-
+    
 [Serializable]
 public struct FrameEvent
 {
     public int frame;
     public FrameEventType type;
+    public HitboxData hitboxData;    // only used when type is SpawnHitbox
+}
+
+[Serializable]
+public struct HitboxData
+{
+    public float offsetX;       // forward offset from character center
+    public float offsetY;       // vertical offset from character center
+    public float width;
+    public float height;
+    public int damage;
+    public Vector2 knockback;
 }
 
 public enum FrameEventType
 {
-    SpawnFX,
-    HorizontalSlash,
-    VerticalSlash,
+    SpawnHitbox,
+    SpawnVFX,
+    SpawnSFX,
     Block
 }
 
