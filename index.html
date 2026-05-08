@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Inference Interface</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --accent: #38bdf8;
+            --text: #f8fafc;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            width: 100%;
+            max-width: 900px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: var(--card);
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+        h2 { margin-top: 0; color: var(--accent); font-size: 1.2rem; text-transform: uppercase; letter-spacing: 1px; }
+        .input-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        label { display: block; font-size: 0.8rem; margin-bottom: 5px; color: #94a3b8; }
+        input {
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: white;
+            padding: 8px;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+        .btn {
+            grid-column: span 2;
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .btn:hover { transform: translateY(-2px); brightness: 1.1; }
+        
+        .output-card {
+            background: #334155;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            position: relative;
+        }
+        .viz-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .vector-canvas {
+            background: #0f172a;
+            border-radius: 50%;
+            border: 1px solid var(--accent);
+        }
+        .shap-toggle {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            cursor: pointer;
+        }
+        .shap-img {
+            width: 100%;
+            margin-top: 10px;
+            display: none;
+            background: white;
+            border-radius: 8px;
+        }
+        .badge {
+            background: var(--accent);
+            color: var(--bg);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="panel">
+        <h2>Input Features</h2>
+        <div class="input-group">
+            <div><label>Self X</label><input type="number" id="sx" value="0"></div>
+            <div><label>Self Y</label><input type="number" id="sy" value="0"></div>
+            <div><label>Self Vel X</label><input type="number" id="svx" value="2"></div>
+            <div><label>Self Vel Y</label><input type="number" id="svy" value="0"></div>
+            <div><label>Enemy X</label><input type="number" id="ex" value="5"></div>
+            <div><label>Enemy Y</label><input type="number" id="ey" value="0"></div>
+            <div><label>Enemy Vel X</label><input type="number" id="evx" value="-1"></div>
+            <div><label>Enemy Vel Y</label><input type="number" id="evy" value="0"></div>
+            <button class="btn" onclick="runInference()">Run Inference</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>Model Output</h2>
+        
+        <div class="output-card">
+            <div style="display:flex; justify-content: space-between;">
+                <span>Flip: <span id="res-flip" class="badge">-</span></span>
+                <span>Move: <span id="res-move" class="badge">-</span></span>
+            </div>
+        </div>
+
+        <div class="output-card">
+            <label class="shap-toggle"><input type="checkbox" onchange="toggleShap(this, 'shap-kb')"> Explain</label>
+            <div class="viz-container">
+                <canvas id="canvas-kb" class="vector-canvas" width="60" height="60"></canvas>
+                <div>
+                    <div style="font-size: 0.8rem; color:#94a3b8">Knockback</div>
+                    <div id="val-kb">Power: 0.0</div>
+                </div>
+            </div>
+            <div id="shap-kb" class="shap-img"></div>
+        </div>
+
+        <div class="output-card">
+            <label class="shap-toggle"><input type="checkbox" onchange="toggleShap(this, 'shap-jump')"> Explain</label>
+            <div class="viz-container">
+                <canvas id="canvas-jump" class="vector-canvas" width="60" height="60"></canvas>
+                <div>
+                    <div style="font-size: 0.8rem; color:#94a3b8">Jump</div>
+                    <div id="val-jump">Power: 0.0</div>
+                </div>
+            </div>
+            <div id="shap-jump" class="shap-img"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function drawVector(canvasId, magnitude, angle, isHalf = false) {
+        const canvas = document.getElementById(canvasId);
+        const ctx = canvas.getContext('2d');
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const r = 25;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw base arc
+        ctx.strokeStyle = '#334155';
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, isHalf ? Math.PI : 0, isHalf ? 0 : Math.PI * 2);
+        ctx.stroke();
+
+        // Draw vector line
+        // Angle comes in radians. We map it to canvas coordinates.
+        // In Canvas, 0 is right, but we need to ensure direction matches game logic.
+        const targetX = cx + Math.cos(angle) * (magnitude * r);
+        const targetY = cy - Math.sin(angle) * (magnitude * r);
+
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(targetX, targetY);
+        ctx.stroke();
+    }
+
+    async function runInference() {
+        const inputs = [
+            'sx', 'sy', 'svx', 'svy', 'ex', 'ey', 'evx', 'evy'
+        ].map(id => parseFloat(document.getElementById(id).value));
+
+        const response = await fetch('/predict', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({data: inputs})
+        });
+        const data = await response.json();
+
+        // Update UI
+        document.getElementById('res-flip').innerText = data.isFlipped ? "YES" : "NO";
+        document.getElementById('res-move').innerText = data.move;
+        document.getElementById('val-kb').innerText = `Power: ${data.kb_power.toFixed(2)}`;
+        document.getElementById('val-jump').innerText = `Power: ${data.jump_power.toFixed(2)}`;
+
+        drawVector('canvas-kb', data.kb_power, data.kb_direction);
+        drawVector('canvas-jump', data.jump_power / 2, data.jump_direction, true);
+    }
+
+    async function toggleShap(cb, containerId) {
+        const container = document.getElementById(containerId);
+        if (cb.checked) {
+            const inputs = ['sx', 'sy', 'svx', 'svy', 'ex', 'ey', 'evx', 'evy'].map(id => parseFloat(document.getElementById(id).value));
+            const response = await fetch('/explain', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({data: inputs})
+            });
+            const svgText = await response.text();
+            container.innerHTML = svgText;
+            container.style.display = 'block';
+        } else {
+            container.style.display = 'none';
+        }
+    }
+
+    // Initial draw
+    drawVector('canvas-kb', 0, 0);
+    drawVector('canvas-jump', 0, 0, true);
+</script>
+
+</body>
+</html>

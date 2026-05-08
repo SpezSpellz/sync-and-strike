@@ -1,0 +1,7 @@
+onnx==1.21.0
+onnxruntime==1.25.1
+numpy==2.4.4
+shap==0.51.0
+matplotlib==3.10.9
+fastapi[standard]==0.136.1
+pydantic==2.13.4
