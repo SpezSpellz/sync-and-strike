@@ -22,10 +22,11 @@ public class AnimationData : ScriptableObject
     public int firstActionable;
 
     [Header("Physics")]
+    public bool continuousImpulse;
     public Vector2 impulse;
     public float knockback;
 }
-    
+
 [Serializable]
 public struct FrameEvent
 {

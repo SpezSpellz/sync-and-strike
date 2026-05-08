@@ -17,7 +17,6 @@ public class CharacterPhysics : PhysicsCollider
         veloX += impulse.x * direction.x;
         veloY += impulse.y;
     }
-
     public void ApplyKnockback(Vector2 knockback)
     {
         veloX += knockback.x;

@@ -21,5 +21,6 @@ MonoBehaviour:
   loop: 0
   events: []
   firstActionable: 13
-  impulse: {x: 0, y: 0}
+  continuousImpulse: 0
+  impulse: {x: 0, y: 0.3}
   knockback: 0

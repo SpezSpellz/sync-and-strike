@@ -29,7 +29,7 @@ public class CharacterController : MonoBehaviour
     public virtual void Start()
     {
         physics.Initialize(characterData);
-        anim.Initialize(characterData.animations, this.onFrameEvent);
+        anim.Initialize(characterData.animations, this.onFrameEvent, physics);
         this.id = TurnManager.Instance.RegisterPlayer(this);
     }
 
@@ -143,7 +143,7 @@ public class CharacterController : MonoBehaviour
     public virtual void RequestDecision()
     {
 
-    }
+    }   
 
     public void Step()
     {
@@ -156,7 +156,7 @@ public class CharacterController : MonoBehaviour
     {
         anim.PlayMove(moveId, onComplete);
         var move = characterData.GetMove(moveId);
-        if (move != null)
+        if (move != null && !move.continuousImpulse) // if the move has an impulse and isn't continuous, apply it immediately. if it's continuous, the impulse will be applied in the CharacterAnimation's Step function.
             physics.ApplyImpulse(move.impulse);
     }
 }

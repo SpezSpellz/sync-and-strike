@@ -22,8 +22,9 @@ MonoBehaviour:
   - {fileID: -4298613880584744700, guid: b95779b338aa8a541ae6e02df5c74a83, type: 3}
   - {fileID: -6199852141908569384, guid: b95779b338aa8a541ae6e02df5c74a83, type: 3}
   - {fileID: 8546612744555856308, guid: b95779b338aa8a541ae6e02df5c74a83, type: 3}
-  loop: 0
+  loop: 1
   events: []
   firstActionable: 10
-  impulse: {x: 0.2, y: 0}
+  continuousImpulse: 1
+  impulse: {x: 0.015, y: 0}
   knockback: 0
