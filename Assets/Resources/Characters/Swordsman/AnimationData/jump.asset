@@ -16,6 +16,7 @@ MonoBehaviour:
   moveId: jump
   moveName: Jump
   icon: {fileID: 892159663, guid: 87d65c3a180ac3f4ebf5b3f75fbbabcd, type: 3}
+  requiredInput: 1
   frames:
   - {fileID: 4281637774074219296, guid: abf2c526b7d3b07459814ef7a3a3a2e3, type: 3}
   loop: 0
@@ -30,5 +31,6 @@ MonoBehaviour:
       damage: 0
       knockback: {x: 0, y: 0}
   firstActionable: 10
+  continuousImpulse: 0
   impulse: {x: 0, y: 0}
   knockback: 0

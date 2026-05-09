@@ -25,6 +25,7 @@ public class LockIn : MonoBehaviour
 
         PlayerController player = FindFirstObjectByType<PlayerController>();
         TurnManager.Instance.SubmitMove(player);
+        
         button.image.color = UIManager.Colors.toggleOn;
 
         // assuming the turn is done

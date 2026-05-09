@@ -5,9 +5,11 @@ using TMPro;
 public class MoveButton : MonoBehaviour
 {
     [SerializeField] private Image icon;
+
     public string moveId;
     public string moveName;
     public TextMeshProUGUI nameText;
+    private AnimationData data;
 
     private void Awake()
     {
@@ -19,6 +21,7 @@ public class MoveButton : MonoBehaviour
 
     public void Initialize(AnimationData data)
     {
+        this.data = data;
         moveId = data.moveId;
         moveName = data.moveName;
 
@@ -28,7 +31,26 @@ public class MoveButton : MonoBehaviour
     private void OnMoveButtonPressed()
     {
         if (TurnManager.Instance.Phase != TurnPhase.Planning) return;
-        FindFirstObjectByType<PlayerController>().SelectMove(moveId);
-        nameText.text = moveName; // update the text above the column
+
+        nameText.text = moveName; // set the text above to the column
+
+        Debug.Log($"data: {this.data}");
+        Debug.Log($"nameText: {nameText}");
+        Debug.Log($"TurnManager: {TurnManager.Instance}");
+
+        switch (this.data.requiredInput)
+        {
+            case RequiredInput.None:
+                FindFirstObjectByType<PlayerController>().SelectMove(moveId);
+                break;
+            case RequiredInput.JumpWheel:
+                JumpWheel.Instance.Show();
+                break;
+            /*
+            case RequiredInput.DirectionWheel:
+                FindFirstObjectByType<DirectionWheel>().Show(data.moveId); // NOT IMPLEMENTED YET
+                break;
+                */
+        }
     }
 }

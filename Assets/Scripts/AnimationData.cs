@@ -9,6 +9,7 @@ public class AnimationData : ScriptableObject
     public string moveId;      // e.g. "punch", "uppercut", "sweep_kick"
     public string moveName;    // e.g. "Punch", "Uppercut", "Sweep Kick" (display name)
     public Sprite icon;
+    public RequiredInput requiredInput;
 
     [Header("Animation")]
     public Sprite[] frames;
@@ -44,6 +45,13 @@ public struct HitboxData
     public float height;
     public int damage;
     public Vector2 knockback;
+}
+
+public enum RequiredInput
+{
+    None,
+    JumpWheel,
+    DirectionWheel,
 }
 
 public enum FrameEventType

@@ -80,6 +80,8 @@ public class TurnManager : MonoBehaviour
         {
             Phase = TurnPhase.Simulating;
             completedCount = 0;
+            // Hide the UI
+            UIManager.Instance.HideMoveUI();
             foreach (var player_turn_data in players.getList())
             {
                 player_turn_data.player.ExecuteMove(player_turn_data.submitted_move ?? "idle", () => {
@@ -119,6 +121,7 @@ public class TurnManager : MonoBehaviour
                                 player_turn_data.submitted_move = null;
                                 player_turn_data.player.RequestDecision();
                             }
+                            UIManager.Instance.ShowMoveUI();
                             break;
                         }
                         foreach (var player_turn_data in players.getList())
