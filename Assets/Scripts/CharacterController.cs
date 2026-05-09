@@ -93,7 +93,7 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    public void Load(SaveData savedata)
+    public virtual void Load(SaveData savedata)
     {
         this.physics.setPosition(savedata.pos.x, savedata.pos.y);
         this.physics.setVelocity(savedata.velocity.x, savedata.velocity.y);
@@ -108,7 +108,7 @@ public class CharacterController : MonoBehaviour
                 SpawnHitbox(frameEvent.hitboxData);
                 break;
             case FrameEventType.Jump:
-                this.physics.AddVelocity(new Vector2(Mathf.Cos(JumpDirection), Mathf.Sin(JumpDirection)) * JumpPower * 0.12f);
+                this.physics.AddVelocity(new Vector2(Mathf.Cos(JumpDirection), Mathf.Sin(JumpDirection)) * JumpPower * 0.24f);
                 break;
             case FrameEventType.SpawnVFX:
                 // read from data later
