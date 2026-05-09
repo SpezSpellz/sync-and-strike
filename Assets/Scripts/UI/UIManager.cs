@@ -8,6 +8,7 @@ public class UIManager : MonoBehaviour
     [SerializeField] private UIColorPalette palette;
     [SerializeField] private RectTransform moveUI;
     [SerializeField] private RectTransform moveSettingUI;
+    [SerializeField] private JumpWheel jumpUI;
 
     private void Awake()
     {
@@ -17,6 +18,7 @@ public class UIManager : MonoBehaviour
 
     public void HideMoveUI()
     {   
+        HideMovementUI();
         moveUI.gameObject.SetActive(false);
         moveSettingUI.gameObject.SetActive(false);
     }
@@ -24,5 +26,15 @@ public class UIManager : MonoBehaviour
     {
         moveUI.gameObject.SetActive(true);
         moveSettingUI.gameObject.SetActive(true);
+    }
+
+    public void HideMovementUI()
+    {
+        jumpUI.Hide();
+    }
+
+    public void ShowMovementUI()
+    {
+        jumpUI.Show();
     }
 }

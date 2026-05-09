@@ -28,7 +28,7 @@ public class JumpWheel : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoin
     private void Awake()
     {
         Instance = this;
-        player = FindObjectOfType<PlayerController>();
+        player = FindFirstObjectByType<PlayerController>();
         gameObject.SetActive(false);
     }
 
@@ -41,7 +41,7 @@ public class JumpWheel : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoin
         currentDirection = Mathf.PI / 2f;
     }
 
-    public void Hide() // unused
+    public void Hide()
     {
         gameObject.SetActive(false);
     }

@@ -329,6 +329,7 @@ MonoBehaviour:
   palette: {fileID: 11400000, guid: 595e60537f079be4aba2e664bbc10cbe, type: 2}
   moveUI: {fileID: 904364432}
   moveSettingUI: {fileID: 1460967420}
+  jumpUI: {fileID: 194306984}
 --- !u!1 &164273751
 GameObject:
   m_ObjectHideFlags: 0
