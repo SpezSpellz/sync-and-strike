@@ -76,23 +76,49 @@ def modify_onnx_outputs(model_path):
 modified_model_bytes = modify_onnx_outputs(MODEL_PATH)
 sess = ort.InferenceSession(modified_model_bytes)
 action_names = [x.name for x in sess.get_outputs()]
+print(action_names)
 continuous_actions_index = action_names.index("deterministic_continuous_actions")
 discrete_actions_index = action_names.index("deterministic_discrete_actions")
+raw_continuous_action_index = action_names.index("/_continuous_distribution/mu/Gemm_output_0")
+raw_move_action_index = action_names.index("/_discrete_distribution/Softmax_1_output_0")
+raw_flip_action_index = action_names.index("/_discrete_distribution/Softmax_output_0")
 input_name = "obs_0"
 
 # --- SHAP Setup ---
 # Mock background data for SHAP (In a real scenario, use a representative dataset)
 background_data = np.random.randn(100, 8).astype(np.float32)
 
-def model_predict(data):
-    # Wrapper for SHAP to interpret the model
-    # We target the specific output index for the desired attribute
-    return sess.run(None, {input_name: data.astype(np.float32), "action_masks": np.ones((1, 10), dtype=np.float32)})[0]
+def model_predict(x_batch, target_attr, target_idx=0):
+    # Ensure x_batch is a 2D numpy array (Batch Size, Features)
+    x_batch = np.atleast_2d(x_batch).astype(np.float32)
 
-explainer = shap.Explainer(model_predict, background_data)
+    # Create the action mask for the ENTIRE batch at once
+    # If the batch has 100 samples, we need a (100, 10) mask
+    batch_size = x_batch.shape[0]
+    masks = np.ones((batch_size, 10), dtype=np.float32)
+
+    # Run inference on the whole batch - NO LOOP
+    # We index [4] because you mentioned it's the 5th output
+    results = sess.run(None, {
+        "obs_0": x_batch,
+        "action_masks": masks
+    })
+    if target_attr == "isFlipped": return results[raw_flip_action_index][:, target_idx].astype(np.float64)
+    if target_attr == "move": return results[raw_move_action_index][:, target_idx].astype(np.float64)
+    if target_attr == "kb_power": return results[raw_continuous_action_index][:, 0].astype(np.float64)
+    if target_attr == "kb_direction": return results[raw_continuous_action_index][:, 1].astype(np.float64)
+    if target_attr == "jump_power": return results[raw_continuous_action_index][:, 2].astype(np.float64)
+    if target_attr == "jump_direction": return results[raw_continuous_action_index][:, 3].astype(np.float64)
+    
+    return np.array(results[raw_move_action_index])
 
 class InferenceRequest(BaseModel):
     data: list # [pos_x, pos_y, vel_x, vel_y, e_pos_x, e_pos_y, e_vel_x, e_vel_y]
+
+class ExplainRequest(BaseModel):
+    data: list[float]
+    target: str
+    index: int
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
@@ -114,7 +140,9 @@ async def predict(req: InferenceRequest):
     
     res = {
         "isFlipped": bool(discrete[0] == 0),
+        "isFlippedIndex": int(discrete[0]),
         "move": moves[int(discrete[1])] if int(discrete[1]) < len(moves) else "Unknown",
+        "move_index": int(discrete[1]),
         "kb_power": (float(continuous[0]) + 1.0) / 2.0,
         "kb_direction": (float(continuous[1]) + 1.0) * np.pi,
         "jump_power": (float(continuous[2]) + 3.0) / 2.0,
@@ -123,13 +151,22 @@ async def predict(req: InferenceRequest):
     return res
 
 @app.post("/explain")
-async def explain(req: InferenceRequest):
+async def explain(req: ExplainRequest):
+    print(req.index)
     input_tensor = np.array(req.data, dtype=np.float32).reshape(1, 8) / 10.0
-    shap_values = explainer(input_tensor)
+    explainer = shap.KernelExplainer(lambda x: model_predict(x, req.target, req.index), background_data)
+    shap_v = explainer.shap_values(input_tensor)
+    expl_obj = shap.Explanation(
+        values=shap_v[0], # The SHAP values for one class
+        base_values=explainer.expected_value,
+        data=input_tensor[0],
+        feature_names=["Self X", "Self Y", "Self Velocity X", "Self Velocity Y", "Enemy X", "Enemy Y", "Enemy Velocity X", "Enemy Velocity Y"]
+    )
     
     # Generate SHAP waterfall plot
     plt.figure(figsize=(8, 4))
-    shap.plots.waterfall(shap_values[0], show=False)
+    shap.plots.waterfall(expl_obj, show=False)
+    plt.title(f"SHAP: {req.target}")
     
     img_buf = io.BytesIO()
     plt.savefig(img_buf, format='svg', bbox_inches='tight')
