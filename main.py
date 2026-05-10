@@ -86,7 +86,7 @@ input_name = "obs_0"
 
 # --- SHAP Setup ---
 # Mock background data for SHAP (In a real scenario, use a representative dataset)
-background_data = np.random.randn(100, 8).astype(np.float32)
+background_data = np.loadtxt('sample.csv', delimiter=',')
 
 def model_predict(x_batch, target_attr, target_idx=0):
     # Ensure x_batch is a 2D numpy array (Batch Size, Features)
@@ -152,7 +152,6 @@ async def predict(req: InferenceRequest):
 
 @app.post("/explain")
 async def explain(req: ExplainRequest):
-    print(req.index)
     input_tensor = np.array(req.data, dtype=np.float32).reshape(1, 8) / 10.0
     explainer = shap.KernelExplainer(lambda x: model_predict(x, req.target, req.index), background_data)
     shap_v = explainer.shap_values(input_tensor)
