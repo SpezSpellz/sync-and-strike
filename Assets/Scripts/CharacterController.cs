@@ -33,7 +33,7 @@ public class CharacterController : MonoBehaviour
 
     public void ApplyKnockback(Vector2 knockback)
     {
-        this.physics.AddVelocity(knockback + (new Vector2(Mathf.Cos(KnockbackIndirectionDirection), Mathf.Sin(KnockbackIndirectionDirection))) * (KnockbackIndirectionPower * knockback.magnitude * 0.98f));
+        this.physics.AddVelocity(knockback + (new Vector2(Mathf.Cos(KnockbackIndirectionDirection), Mathf.Sin(KnockbackIndirectionDirection))) * (KnockbackIndirectionPower * knockback.magnitude * 0.98f)); // multipler 0.98
     }
 
     public struct SaveData
