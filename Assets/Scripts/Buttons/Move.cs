@@ -42,6 +42,7 @@ public class MoveButton : MonoBehaviour
         {
             case RequiredInput.None:
                 FindFirstObjectByType<PlayerController>().SelectMove(moveId);
+                JumpWheel.Instance.Hide();
                 break;
             case RequiredInput.JumpWheel:
                 JumpWheel.Instance.Show();
