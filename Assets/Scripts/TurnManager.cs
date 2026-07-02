@@ -24,6 +24,8 @@ public class TurnManager : MonoBehaviour
     private int completedCount = 0;
     private float ticksAwaiting = 0.0f;
 
+    private bool turnEndedEarly;
+
     [SerializeField] private float defaultTurnDuration = 20f; // Keep it for now even if unused
 
     private void Awake()
@@ -68,6 +70,22 @@ public class TurnManager : MonoBehaviour
         return this.players.get(p.id).submitted_move != null;
     }
 
+    private void EndTurnEarly()
+    {
+        if (turnEndedEarly) return;
+        turnEndedEarly = true;
+
+        Phase = TurnPhase.Planning;
+        submittedMoves = 0;
+
+        foreach (var player_turn_data in players.getList())
+        {
+            player_turn_data.submitted_move = null;
+            player_turn_data.player.RequestDecision();
+        }
+        UIManager.Instance.ShowMoveUI();
+    }
+
     public void SubmitMove(CharacterController p)
     {
         if (Phase != TurnPhase.Planning) return;
@@ -79,13 +97,17 @@ public class TurnManager : MonoBehaviour
         if (submittedMoves >= players.getList().Count)
         {
             Phase = TurnPhase.Simulating;
+            turnEndedEarly = false;
             completedCount = 0;
             // Hide the UI
             UIManager.Instance.HideMoveUI();
             foreach (var player_turn_data in players.getList())
             {
                 player_turn_data.player.ExecuteMove(player_turn_data.submitted_move ?? "idle", () => {
+                    if (Phase != TurnPhase.Simulating) return;
+                    
                     completedCount++;
+                    EndTurnEarly();
                 });
             }
         }
@@ -106,6 +128,8 @@ public class TurnManager : MonoBehaviour
                 }
             case TurnPhase.Simulating:
                 {
+                    if (Phase != TurnPhase.Simulating)
+                        break;
                     int count = 0;
                     ticksAwaiting += Time.deltaTime;
                     while (ticksAwaiting > 0 || (fastForward && ++count < 100))
@@ -115,6 +139,7 @@ public class TurnManager : MonoBehaviour
                         if (completedCount >= totalPlayers)
                         {
                             Phase = TurnPhase.Planning;
+                            turnEndedEarly = false;
                             submittedMoves = 0;
                             foreach (var player_turn_data in players.getList())
                             {
