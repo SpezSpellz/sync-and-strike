@@ -10,26 +10,30 @@ public class MoveButton : MonoBehaviour
     public string moveName;
     public TextMeshProUGUI nameText;
     private AnimationData data;
+    private Button button;
+    private bool isControllable;
 
     private void Awake()
     {
-        GetComponent<Button>().onClick.AddListener(OnMoveButtonPressed);
+        button = GetComponent<Button>();
+        if (button != null)
+            button.onClick.AddListener(OnMoveButtonPressed);
         icon = transform.Find("Icon").GetComponent<Image>();
         nameText = transform.parent.parent.Find("MoveName").GetComponent<TextMeshProUGUI>(); // get the text above
     }
 
-
-    public void Initialize(AnimationData data)
+    public void Initialize(AnimationData data, bool isControllable)
     {
         this.data = data;
+        this.isControllable = isControllable;
         moveId = data.moveId;
         moveName = data.moveName;
-
         icon.sprite = data.icon;
     }
 
     private void OnMoveButtonPressed()
     {
+        if (!isControllable) return;
         if (TurnManager.Instance.Phase != TurnPhase.Planning) return;
 
         nameText.text = moveName; // set the text above to the column

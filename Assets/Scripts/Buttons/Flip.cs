@@ -5,8 +5,9 @@ public class Flip : MonoBehaviour
 {
     private Toggle toggle;
     private PlayerController player;
+    private bool isControllable;
 
-    private void Start()
+    private void Awake()
     {
         toggle = GetComponent<Toggle>();
 
@@ -19,9 +20,17 @@ public class Flip : MonoBehaviour
         player = FindFirstObjectByType<PlayerController>();
 
         toggle.onValueChanged.AddListener(OnFlipButtonPressed);
+    }
 
-        // apply initial visual
-        UpdateVisual(toggle.isOn);
+    public void Initialize(bool isControllable)
+    {
+        this.isControllable = isControllable;
+
+        if (toggle != null)
+        {
+            // apply initial visual
+            UpdateVisual(toggle.isOn);
+        }
     }
 
     private void OnFlipButtonPressed(bool isOn)
@@ -33,7 +42,8 @@ public class Flip : MonoBehaviour
             return;
         }
 
-        player.Flip(isOn);
+        if (isControllable)
+            player.Flip(isOn);
         UpdateVisual(isOn);
     }
 

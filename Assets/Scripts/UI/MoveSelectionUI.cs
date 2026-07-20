@@ -24,6 +24,7 @@ public class MoveSelectionUI : MonoBehaviour
     public int columnHeight = 280;
     public int moveButtonWidth = 80;
     public int moveButtonHeight = 80;
+    public bool isControllable = true;
 
     private int nameBoxHeight = 20;
 
@@ -40,13 +41,15 @@ public class MoveSelectionUI : MonoBehaviour
         GameObject lockInButtonObj = Instantiate(textButtonPrefab, columnConfirm.transform);
         lockInButtonObj.GetComponentInChildren<TextMeshProUGUI>().text = "Lock In";
 
-        lockInButtonObj.AddComponent<LockIn>();
+        LockIn lockIn = lockInButtonObj.AddComponent<LockIn>();
+        lockIn.Initialize(isControllable);
 
         // flip button
         GameObject flipToggleObj = Instantiate(toggleButtonPrefab, columnConfirm.transform);
         flipToggleObj.GetComponentInChildren<TextMeshProUGUI>().text = "Flip";
 
-        flipToggleObj.AddComponent<Flip>();
+        Flip flip = flipToggleObj.AddComponent<Flip>();
+        flip.Initialize(isControllable);
 
         columnMovement = CreateColumn("Movement", Vector2.zero);
         columnAttack   = CreateColumn("Attack", Vector2.zero);
@@ -65,7 +68,7 @@ public class MoveSelectionUI : MonoBehaviour
             GameObject buttonObj = Instantiate(moveButtonPrefab, column);
             buttonObj.name = move.moveId;
             MoveButton moveButton = buttonObj.GetComponent<MoveButton>();
-            moveButton.Initialize(move);
+            moveButton.Initialize(move, isControllable);
         }
     }
 

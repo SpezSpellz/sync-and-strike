@@ -4,8 +4,8 @@ using UnityEngine.UI;
 public class LockIn : MonoBehaviour
 {
     private Button button;
-
-    private void Start()
+    
+    public void Initialize(bool isControllable)
     {
         button = GetComponent<Button>();
 
@@ -15,8 +15,17 @@ public class LockIn : MonoBehaviour
             return;
         }
 
-        button.image.color = UIManager.Colors.toggleOff;
-        button.onClick.AddListener(OnLockInButtonPressed);
+        // Button only function when it's for controllable character
+        if (isControllable)
+        {
+            button.image.color = UIManager.Colors.toggleOff;
+            button.onClick.AddListener(OnLockInButtonPressed);
+        }
+        
+        else
+        {
+            button.image.color = UIManager.Colors.disabled;
+        }
     }
 
     private void OnLockInButtonPressed()
