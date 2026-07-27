@@ -81,7 +81,14 @@ public class TurnManager : MonoBehaviour
         foreach (var player_turn_data in players.getList())
         {
             player_turn_data.submitted_move = null;
-            player_turn_data.player.RequestDecision();
+            var player = player_turn_data.player;
+                if(player.TargetPosition != null)
+                {
+                    if(player.transform.localPosition.x <= player.TargetPosition.localPosition.x)
+                        player.Flip(false);
+                    else player.Flip(true);
+                }
+            player.RequestDecision();
         }
         UIManager.Instance.ShowMoveUI();
     }
@@ -144,7 +151,14 @@ public class TurnManager : MonoBehaviour
                             foreach (var player_turn_data in players.getList())
                             {
                                 player_turn_data.submitted_move = null;
-                                player_turn_data.player.RequestDecision();
+                                var player = player_turn_data.player;
+                                if(player.TargetPosition != null)
+                                {
+                                    if(player.transform.localPosition.x <= player.TargetPosition.localPosition.x)
+                                        player.Flip(false);
+                                    else player.Flip(true);
+                                }
+                                player.RequestDecision();
                             }
                             UIManager.Instance.ShowMoveUI();
                             break;

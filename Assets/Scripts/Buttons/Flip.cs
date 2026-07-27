@@ -18,42 +18,60 @@ public class Flip : MonoBehaviour
         }
 
         player = FindFirstObjectByType<PlayerController>();
-
         toggle.onValueChanged.AddListener(OnFlipButtonPressed);
     }
 
     public void Initialize(bool isControllable)
     {
         this.isControllable = isControllable;
+        ResetToggle();
+    }
 
-        if (toggle != null)
+    private void OnEnable()
+    {
+        if (TurnManager.Instance != null && TurnManager.Instance.Phase == TurnPhase.Planning)
         {
-            // apply initial visual
-            UpdateVisual(toggle.isOn);
+            ResetToggle();
         }
     }
 
     private void OnFlipButtonPressed(bool isOn)
     {
-        // revert if not in planning phase
-        if (TurnManager.Instance.Phase != TurnPhase.Planning)
+        if (TurnManager.Instance == null || TurnManager.Instance.Phase != TurnPhase.Planning)
         {
-            toggle.isOn = !isOn;
+            ResetToggle();
             return;
         }
 
-        if (isControllable)
-            player.Flip(isOn);
+        if (!isControllable || player == null)
+        {
+            ResetToggle();
+            return;
+        }
+
+        bool currentlyFlipped = player.transform.localScale.x < 0f;
+        bool shouldFlipTo = !currentlyFlipped;
+
+        player.Flip(shouldFlipTo);
         UpdateVisual(isOn);
+    }
+
+    private void ResetToggle()
+    {
+        if (toggle == null)
+            return;
+
+        toggle.SetIsOnWithoutNotify(false);
+        UpdateVisual(false);
     }
 
     private void UpdateVisual(bool isOn)
     {
+        if (toggle == null)
+            return;
+
         var colors = UIManager.Colors;
-
         Color baseColor = isOn ? colors.toggleOn : colors.toggleOff;
-
-        Debug.Log("Color is" + baseColor);
 
         ColorBlock cb = toggle.colors;
         cb.normalColor = baseColor;

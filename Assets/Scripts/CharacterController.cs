@@ -15,6 +15,7 @@ public class CharacterController : MonoBehaviour
     public float JumpPower { get; private set; } = 1;
     public float KnockbackIndirectionDirection { get; private set; } = 0;
     public float KnockbackIndirectionPower { get; private set; } = 0;
+    public Transform TargetPosition { get; protected set; }
 
     // Direction in radians
     public void setJumpInfo(float power, float direction)

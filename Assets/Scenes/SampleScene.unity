@@ -415,6 +415,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 164273752}
+  - component: {fileID: 164273754}
+  - component: {fileID: 164273753}
   m_Layer: 5
   m_Name: Enemy
   m_TagString: Untagged
@@ -438,9 +440,59 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 100, y: 100}
+  m_AnchoredPosition: {x: 480, y: 0}
+  m_SizeDelta: {x: 960, y: 300}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &164273753
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 164273751}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3d24784dd6bdb434da483e445626f3a6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MoveSelectionUI
+  moveButtonPrefab: {fileID: 3382168721225523719, guid: 4243bf1234ab5eb4dad79f0f692880f4, type: 3}
+  moveColumnPrefab: {fileID: 6661139334025420849, guid: 65107f76e7ddbd044978917bc215747f, type: 3}
+  confirmColumnPrefab: {fileID: 8342293813583826452, guid: 5347eeecc51be7046acf1ac7f65da558, type: 3}
+  textButtonPrefab: {fileID: 3659315464312906156, guid: 578562feb9d8a7a4198a31b836d01be2, type: 3}
+  toggleButtonPrefab: {fileID: 3659315464312906156, guid: 66daf0e5b7ba8bf48ba797f6d9c05b1f, type: 3}
+  confirmColumnWidth: 160
+  confirmButtonHeight: 60
+  columnWidth: 160
+  columnHeight: 300
+  moveButtonWidth: 80
+  moveButtonHeight: 80
+  isControllable: 0
+--- !u!114 &164273754
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 164273751}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 30649d3a9faa99c48a7b1166b86bf2a0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.HorizontalLayoutGroup
+  m_Padding:
+    m_Left: 0
+    m_Right: 0
+    m_Top: 0
+    m_Bottom: 0
+  m_ChildAlignment: 2
+  m_Spacing: 0
+  m_ChildForceExpandWidth: 0
+  m_ChildForceExpandHeight: 0
+  m_ChildControlWidth: 1
+  m_ChildControlHeight: 0
+  m_ChildScaleWidth: 1
+  m_ChildScaleHeight: 1
+  m_ReverseArrangement: 0
 --- !u!1 &174946275
 GameObject:
   m_ObjectHideFlags: 0
@@ -2398,6 +2450,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c41195b19fcdb0d48827fcc58626e7a2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
+  EnemyPosition: {fileID: 244021960}
 --- !u!1 &1997979023
 GameObject:
   m_ObjectHideFlags: 0
@@ -2494,7 +2547,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -479.99994, y: 0.0000076293945}
+  m_AnchoredPosition: {x: -480, y: 0}
   m_SizeDelta: {x: 960, y: 300}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &2034693727
@@ -2546,6 +2599,7 @@ MonoBehaviour:
   columnHeight: 300
   moveButtonWidth: 80
   moveButtonHeight: 80
+  isControllable: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
