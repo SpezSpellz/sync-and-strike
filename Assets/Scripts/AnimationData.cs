@@ -6,8 +6,10 @@ public class AnimationData : ScriptableObject
 {
     [Header("Identity")]
     public MoveType move;
-    public string moveId;      // e.g. "punch", "uppercut", "sweep_kick"
-    public string moveName;    // e.g. "Punch", "Uppercut", "Sweep Kick" (display name)
+    public string moveId;               // e.g. "punch", "uppercut", "sweep_kick"
+    public string moveName;             // e.g. "Punch", "Uppercut", "Sweep Kick" (display name)
+    public bool onlyGrounded;           // Must be on ground to execute this move when onlyGrounded is true (e.g. jump)
+    public bool usableInKnockedback;    // This move is executable even in knockback animation when usableInKnockedback is true (e.g. burst)
     public Sprite icon;
     public RequiredInput requiredInput;
 

@@ -1,3 +1,5 @@
+using Unity.MLAgents.Integrations.Match3;
+using Unity.VisualScripting;
 using UnityEngine;
 
 [RequireComponent(typeof(CharacterAnimation))]
@@ -10,6 +12,9 @@ public class CharacterController : MonoBehaviour
     private CharacterData characterData;
     private bool blocking = false;
     public int id {  get; private set; }
+    public bool IsGrounded => physics != null && physics.IsGrounded;
+    public bool IsBusy { get; private set; } = false;
+    public bool IsKnockedBack { get; private set; } = false;
     public string SelectedMove { get; private set; } = "idle";
     public float JumpDirection { get; private set; } = 1.5707963267948966f;
     public float JumpPower { get; private set; } = 1;
@@ -34,6 +39,8 @@ public class CharacterController : MonoBehaviour
 
     public void ApplyKnockback(Vector2 knockback)
     {
+        Debug.Log($"ApplyKnockback => {name}");
+        IsKnockedBack = true;
         this.physics.AddVelocity(knockback + (new Vector2(Mathf.Cos(KnockbackIndirectionDirection), Mathf.Sin(KnockbackIndirectionDirection))) * (KnockbackIndirectionPower * knockback.magnitude * 0.98f)); // multipler 0.98
     }
 
@@ -50,6 +57,11 @@ public class CharacterController : MonoBehaviour
         anim = GetComponent<CharacterAnimation>();
         physics = GetComponent<CharacterPhysics>();
         characterData = GetComponent<CharacterData>();
+    }
+
+    private void Update()
+    {
+        physics.DetectGround();
     }
 
     public virtual void Start()
@@ -100,6 +112,8 @@ public class CharacterController : MonoBehaviour
         this.physics.setVelocity(savedata.velocity.x, savedata.velocity.y);
         this.characterData.health = savedata.health;
         this.transform.localScale = savedata.localScale;
+        this.IsKnockedBack = false;
+        this.IsBusy = false;
     }
     private void onFrameEvent(FrameEvent frameEvent)
     {
@@ -147,10 +161,44 @@ public class CharacterController : MonoBehaviour
         );
     }
 
-    public void SelectMove(string moveId)
+    public bool CanUseMove(AnimationData moveData)
     {
+        if (moveData.moveId == "idle") return true;
+        if (moveData == null) return false;
+        if (IsBusy) return false;
+        if (moveData.onlyGrounded && !IsGrounded) return false;
+        if (!moveData.usableInKnockedback && IsKnockedBack) return false;
+        return true;
+    }
+
+    public void ResetMove()
+    {
+        SelectedMove = "idle";
+    }
+
+    public bool TrySelectMove(string moveId)
+    {
+        if (string.IsNullOrEmpty(moveId))
+        {
+            SelectedMove = "idle";
+            return false;
+        }
+
+        var move = characterData.GetMove(moveId);
+        if (!CanUseMove(move))
+        {
+            SelectedMove = "idle";
+            return false;
+        }
+
         SelectedMove = moveId;
         Debug.Log($"Move selected: {moveId}");
+        return true;
+    }
+
+    public void SelectMove(string moveId)
+    {
+        TrySelectMove(moveId);
     }
 
     public void Flip(bool flipped)
@@ -181,11 +229,23 @@ public class CharacterController : MonoBehaviour
         anim.Step();
         physics.Step();
         HitboxManager.Instance.SubmitHurtBox(this.getHurtBox());
+
+        var velocity = physics.getVelocity();
+        if (IsKnockedBack && velocity.magnitude < 0.05f && IsGrounded)
+            IsKnockedBack = false;
+        Debug.Log($"{name} Step — vel={physics.getVelocity()}, IsGrounded={IsGrounded}, IsKnockedBack={IsKnockedBack}, IsBusy={IsBusy}");
     }
 
     public void ExecuteMove(string moveId, System.Action onComplete = null)
     {
-        anim.PlayMove(moveId, onComplete);
+        if (moveId != "idle")
+            IsBusy = true;
+        anim.PlayMove(moveId, () =>
+        {
+            IsBusy = false;
+            onComplete?.Invoke();
+        });
+
         var move = characterData.GetMove(moveId);
         if (move != null && !move.continuousImpulse) // if the move has an impulse and isn't continuous, apply it immediately. if it's continuous, the impulse will be applied in the CharacterAnimation's Step function.
             physics.ApplyImpulse(move.impulse);

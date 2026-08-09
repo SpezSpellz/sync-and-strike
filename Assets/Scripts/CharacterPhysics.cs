@@ -2,10 +2,14 @@ using UnityEngine;
 
 public class CharacterPhysics : PhysicsCollider
 {
-
+    [SerializeField]
+    private float rayLength = 0.5f;
+    [SerializeField]
+    private LayerMask ground;
     private CharacterData characterData;
     private float veloX = 0.0f;
     private float veloY = 0.0f;
+    public bool IsGrounded { get; private set; } = true;
 
     public void Initialize(CharacterData characterData)
     {
@@ -64,6 +68,17 @@ public class CharacterPhysics : PhysicsCollider
     {
         PhysicsManager.Instance.StepFor(this);
         this.veloX *= 0.8f;
+    }
+
+    void OnDrawGizmos()
+    {
+        Gizmos.color = Color.red;
+        Gizmos.DrawLine(transform.position, new Vector2(transform.position.x, transform.position.y - rayLength));
+    }
+
+    public void DetectGround()
+    {
+        IsGrounded = Physics2D.Raycast(transform.position, Vector2.down, rayLength, ground);
     }
 
     public Vector2 FacingDirection()

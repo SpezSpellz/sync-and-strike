@@ -15,6 +15,8 @@ MonoBehaviour:
   move: 0
   moveId: super_jump
   moveName: Super Jump
+  onlyGrounded: 1
+  usableInKnockedback: 0
   icon: {fileID: -16536359, guid: dbd3e3f859d69924db27efe5a7a3e930, type: 3}
   requiredInput: 1
   frames:

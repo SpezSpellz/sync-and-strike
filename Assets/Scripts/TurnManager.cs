@@ -84,6 +84,7 @@ public class TurnManager : MonoBehaviour
             var player = player_turn_data.player;
                 if(player.TargetPosition != null)
                 {
+                    player.ResetMove();
                     if(player.transform.localPosition.x <= player.TargetPosition.localPosition.x)
                         player.Flip(false);
                     else player.Flip(true);
@@ -154,6 +155,7 @@ public class TurnManager : MonoBehaviour
                                 var player = player_turn_data.player;
                                 if(player.TargetPosition != null)
                                 {
+                                    player.ResetMove();
                                     if(player.transform.localPosition.x <= player.TargetPosition.localPosition.x)
                                         player.Flip(false);
                                     else player.Flip(true);

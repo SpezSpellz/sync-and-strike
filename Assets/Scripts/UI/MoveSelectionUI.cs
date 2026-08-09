@@ -9,6 +9,7 @@ public class MoveSelectionUI : MonoBehaviour
     [SerializeField] private GameObject confirmColumnPrefab;
     [SerializeField] private GameObject textButtonPrefab;
     [SerializeField] private GameObject toggleButtonPrefab;
+    [SerializeField] private CharacterController owner;
 
 
     private Transform columnMovement;
@@ -68,7 +69,8 @@ public class MoveSelectionUI : MonoBehaviour
             GameObject buttonObj = Instantiate(moveButtonPrefab, column);
             buttonObj.name = move.moveId;
             MoveButton moveButton = buttonObj.GetComponent<MoveButton>();
-            moveButton.Initialize(move, isControllable);
+            var targetOwner = owner != null ? owner : FindFirstObjectByType<PlayerController>();
+            moveButton.Initialize(move, isControllable, targetOwner);
         }
     }
 

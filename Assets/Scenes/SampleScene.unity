@@ -460,6 +460,7 @@ MonoBehaviour:
   confirmColumnPrefab: {fileID: 8342293813583826452, guid: 5347eeecc51be7046acf1ac7f65da558, type: 3}
   textButtonPrefab: {fileID: 3659315464312906156, guid: 578562feb9d8a7a4198a31b836d01be2, type: 3}
   toggleButtonPrefab: {fileID: 3659315464312906156, guid: 66daf0e5b7ba8bf48ba797f6d9c05b1f, type: 3}
+  owner: {fileID: 244021963}
   confirmColumnWidth: 160
   confirmButtonHeight: 60
   columnWidth: 160
@@ -713,6 +714,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d1f3b2e82027be3428e9446242e8e542, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CharacterPhysics
+  rayLength: 0.5
+  ground:
+    serializedVersion: 2
+    m_Bits: 64
 --- !u!114 &244021957
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1979,9 +1984,10 @@ GameObject:
   - component: {fileID: 1685646483}
   - component: {fileID: 1685646482}
   - component: {fileID: 1685646484}
-  m_Layer: 0
+  - component: {fileID: 1685646485}
+  m_Layer: 6
   m_Name: Floor
-  m_TagString: Untagged
+  m_TagString: Ground
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -2072,6 +2078,52 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b2f05a6956ea81d40b3dfe79b5d57539, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StaticCollider
+--- !u!61 &1685646485
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1685646481}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 0
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 1, y: 1}
+    newSize: {x: 1, y: 1}
+    adaptiveTilingThreshold: 0.5
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Size: {x: 1, y: 1}
+  m_EdgeRadius: 0
 --- !u!1 &1746668536
 GameObject:
   m_ObjectHideFlags: 0
@@ -2391,7 +2443,7 @@ Transform:
   m_GameObject: {fileID: 1956807340}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -3.27, y: -0.65, z: 0.01}
+  m_LocalPosition: {x: -3.93, y: -0.63, z: 0.01}
   m_LocalScale: {x: 3, y: 3, z: 0}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2409,6 +2461,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d1f3b2e82027be3428e9446242e8e542, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CharacterPhysics
+  rayLength: 0.5
+  ground:
+    serializedVersion: 2
+    m_Bits: 64
 --- !u!114 &1956807351
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2593,6 +2649,7 @@ MonoBehaviour:
   confirmColumnPrefab: {fileID: 8342293813583826452, guid: 5347eeecc51be7046acf1ac7f65da558, type: 3}
   textButtonPrefab: {fileID: 3659315464312906156, guid: 578562feb9d8a7a4198a31b836d01be2, type: 3}
   toggleButtonPrefab: {fileID: 3659315464312906156, guid: 66daf0e5b7ba8bf48ba797f6d9c05b1f, type: 3}
+  owner: {fileID: 1956807353}
   confirmColumnWidth: 160
   confirmButtonHeight: 60
   columnWidth: 160
