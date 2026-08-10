@@ -7,6 +7,7 @@ using UnityEngine;
 [RequireComponent(typeof(CharacterData))]
 public class CharacterController : MonoBehaviour
 {
+    const string CONTINUE = "continue";
     private CharacterAnimation anim;
     private CharacterPhysics physics;
     private CharacterData characterData;
@@ -15,7 +16,7 @@ public class CharacterController : MonoBehaviour
     public bool IsGrounded => physics != null && physics.IsGrounded;
     public bool IsBusy { get; private set; } = false;
     public bool IsKnockedBack { get; private set; } = false;
-    public string SelectedMove { get; private set; } = "idle";
+    public string SelectedMove { get; private set; } = CONTINUE;
     public float JumpDirection { get; private set; } = 1.5707963267948966f;
     public float JumpPower { get; private set; } = 1;
     public float KnockbackIndirectionDirection { get; private set; } = 0;
@@ -173,21 +174,21 @@ public class CharacterController : MonoBehaviour
 
     public void ResetMove()
     {
-        SelectedMove = "idle";
+        SelectedMove = CONTINUE;
     }
 
     public bool TrySelectMove(string moveId)
     {
         if (string.IsNullOrEmpty(moveId))
         {
-            SelectedMove = "idle";
+            SelectedMove = CONTINUE;
             return false;
         }
 
         var move = characterData.GetMove(moveId);
         if (!CanUseMove(move))
         {
-            SelectedMove = "idle";
+            SelectedMove = CONTINUE;
             return false;
         }
 
@@ -238,6 +239,8 @@ public class CharacterController : MonoBehaviour
 
     public void ExecuteMove(string moveId, System.Action onComplete = null)
     {
+        if (moveId == CONTINUE)
+            return;
         if (moveId != "idle")
             IsBusy = true;
         anim.PlayMove(moveId, () =>
