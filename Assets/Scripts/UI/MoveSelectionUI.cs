@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using Unity.VisualScripting;
+using System.Linq;
+using System.Collections.Generic;
 
 public class MoveSelectionUI : MonoBehaviour
 {
@@ -17,6 +20,7 @@ public class MoveSelectionUI : MonoBehaviour
     private Transform columnDefense;
     private Transform columnSpecial;
     private Transform columnSuper;
+    private List<MoveButton> allMoveButton = new List<MoveButton>();
 
     public int confirmColumnWidth = 160;
     public int confirmButtonHeight = 60;
@@ -30,7 +34,7 @@ public class MoveSelectionUI : MonoBehaviour
     private int nameBoxHeight = 20;
 
 
-    private void Start()
+    private void Awake()
     {
         // confirm column
         GridLayoutGroup columnConfirm = Instantiate(confirmColumnPrefab, transform).GetComponent<UnityEngine.UI.GridLayoutGroup>();
@@ -71,6 +75,18 @@ public class MoveSelectionUI : MonoBehaviour
             MoveButton moveButton = buttonObj.GetComponent<MoveButton>();
             var targetOwner = owner != null ? owner : FindFirstObjectByType<PlayerController>();
             moveButton.Initialize(move, isControllable, targetOwner);
+            Debug.Log("Move name: " + moveButton.moveName);
+            allMoveButton.Add(moveButton);
+        }
+    }
+
+    private void OnEnable()
+    {
+        foreach (MoveButton moveButton in allMoveButton)
+        {
+            moveButton.gameObject.SetActive(true);
+            if (!moveButton.IsUsable())
+                moveButton.gameObject.SetActive(false);
         }
     }
 

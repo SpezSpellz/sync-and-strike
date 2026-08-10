@@ -31,33 +31,11 @@ public class MoveButton : MonoBehaviour
         moveId = data.moveId;
         moveName = data.moveName;
         icon.sprite = data.icon;
-        RefreshState();
     }
 
-    private void OnEnable()
+    public bool IsUsable()
     {
-        RefreshState();
-        Debug.Log($"Refresh {moveId} usable={button.interactable} owner={owner?.name}");
-    }
-    
-    private void Update()
-    {
-        RefreshState();
-    }
-
-    private void RefreshState()
-    {
-        bool usable = isControllable
-            && owner != null
-            && TurnManager.Instance != null
-            && TurnManager.Instance.Phase == TurnPhase.Planning
-            && owner.CanUseMove(data);
-
-        if (button != null)
-            button.interactable = usable;
-
-        if (icon != null)
-            icon.color = usable ? Color.white : UIManager.Colors.disabled;
+        return owner.CanUseMove(data);
     }
 
     private void OnMoveButtonPressed()
@@ -65,7 +43,7 @@ public class MoveButton : MonoBehaviour
         if (!isControllable) return;
         if (TurnManager.Instance == null) return;
         if (TurnManager.Instance.Phase != TurnPhase.Planning) return;
-        if (!owner.CanUseMove(data)) return;
+        if (!IsUsable()) return;
 
         nameText.text = moveName; // set the text above to the column
 
