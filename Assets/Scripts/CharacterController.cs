@@ -179,6 +179,11 @@ public class CharacterController : MonoBehaviour
 
     public bool TrySelectMove(string moveId)
     {
+        if (moveId == CONTINUE)
+        {
+            SelectedMove = CONTINUE;
+            return true;
+        }
         if (string.IsNullOrEmpty(moveId))
         {
             SelectedMove = CONTINUE;

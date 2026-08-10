@@ -8,4 +8,5 @@ public class UIColorPalette : ScriptableObject
     public Color toggleOn;
     public Color toggleOff;
     public Color disabled;
+    public Color moveSelected;
 }

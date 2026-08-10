@@ -12,6 +12,8 @@ public class MoveButton : MonoBehaviour
     private CharacterController owner;
     private AnimationData data;
     private Button button;
+    private MoveSelectionUI parentUI;
+    public bool IsSelected { get; private set; }
     private bool isControllable;
 
     private void Awake()
@@ -23,19 +25,33 @@ public class MoveButton : MonoBehaviour
         nameText = transform.parent.parent.Find("MoveName").GetComponent<TextMeshProUGUI>(); // get the text above
     }
 
-    public void Initialize(AnimationData data, bool isControllable, CharacterController owner)
+    public void Initialize(AnimationData data, bool isControllable, CharacterController owner, MoveSelectionUI parentUI)
     {
         this.data = data;
         this.isControllable = isControllable;
         this.owner = owner;
+        this.parentUI = parentUI;
         moveId = data.moveId;
         moveName = data.moveName;
         icon.sprite = data.icon;
+        SetSelected(false);
+    }
+
+    private void OEnable()
+    {
+        SetSelected(false);
     }
 
     public bool IsUsable()
     {
         return owner.CanUseMove(data);
+    }
+
+    public void SetSelected(bool selected)
+    {
+        IsSelected = selected;
+        if (button != null)
+            button.image.color = selected ? UIManager.Colors.moveSelected : UIManager.Colors.primary;
     }
 
     private void OnMoveButtonPressed()
@@ -44,7 +60,17 @@ public class MoveButton : MonoBehaviour
         if (TurnManager.Instance == null) return;
         if (TurnManager.Instance.Phase != TurnPhase.Planning) return;
         if (!IsUsable()) return;
+        if (parentUI == null) return;
 
+        if (IsSelected)
+        {
+            parentUI.ClearSelection();
+            owner.SelectMove("continue");
+            JumpWheel.Instance.Hide();
+            return;
+        }
+
+        parentUI.SelectMoveButton(this);
         nameText.text = moveName; // set the text above to the column
 
         Debug.Log($"data: {this.data}");

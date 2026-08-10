@@ -20,6 +20,7 @@ public class MoveSelectionUI : MonoBehaviour
     private Transform columnDefense;
     private Transform columnSpecial;
     private Transform columnSuper;
+    private MoveButton selectedMoveButton;
     private List<MoveButton> allMoveButton = new List<MoveButton>();
 
     public int confirmColumnWidth = 160;
@@ -74,7 +75,7 @@ public class MoveSelectionUI : MonoBehaviour
             buttonObj.name = move.moveId;
             MoveButton moveButton = buttonObj.GetComponent<MoveButton>();
             var targetOwner = owner != null ? owner : FindFirstObjectByType<PlayerController>();
-            moveButton.Initialize(move, isControllable, targetOwner);
+            moveButton.Initialize(move, isControllable, targetOwner, this);
             Debug.Log("Move name: " + moveButton.moveName);
             allMoveButton.Add(moveButton);
         }
@@ -82,10 +83,12 @@ public class MoveSelectionUI : MonoBehaviour
 
     private void OnEnable()
     {
+        ClearSelection();
         foreach (MoveButton moveButton in allMoveButton)
         {
-            moveButton.gameObject.SetActive(true);
-            if (!moveButton.IsUsable())
+            if (moveButton.IsUsable())
+                moveButton.gameObject.SetActive(true);
+            else
                 moveButton.gameObject.SetActive(false);
         }
     }
@@ -132,6 +135,27 @@ public class MoveSelectionUI : MonoBehaviour
             case MoveType.Special:  return columnSpecial;
             case MoveType.Super:    return columnSuper;
             default: return null;
+        }
+    }
+
+    public void SelectMoveButton(MoveButton button)
+    {
+        if (selectedMoveButton == button)
+            return;
+
+        if (selectedMoveButton != null)
+            selectedMoveButton.SetSelected(false);
+
+        selectedMoveButton = button;
+        selectedMoveButton.SetSelected(true);
+    }
+
+    public void ClearSelection()
+    {
+        if (selectedMoveButton != null)
+        {
+            selectedMoveButton.SetSelected(false);
+            selectedMoveButton = null;
         }
     }
 }
