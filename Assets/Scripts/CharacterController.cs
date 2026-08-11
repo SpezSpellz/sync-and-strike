@@ -1,3 +1,4 @@
+using NUnit.Framework;
 using Unity.MLAgents.Integrations.Match3;
 using Unity.VisualScripting;
 using UnityEngine;
@@ -55,9 +56,11 @@ public class CharacterController : MonoBehaviour
 
     private void Awake()
     {
+        Debug.Log(name + "Controller is awaken");
         anim = GetComponent<CharacterAnimation>();
         physics = GetComponent<CharacterPhysics>();
         characterData = GetComponent<CharacterData>();
+        physics.Initialize(characterData);
     }
 
     private void Update()
@@ -67,9 +70,9 @@ public class CharacterController : MonoBehaviour
 
     public virtual void Start()
     {
-        physics.Initialize(characterData);
         anim.Initialize(characterData.animations, this.onFrameEvent, physics);
         this.id = TurnManager.Instance.RegisterPlayer(this);
+        Debug.Log(name + " is grounded " + IsGrounded);
     }
 
     public void Damage(float damage)

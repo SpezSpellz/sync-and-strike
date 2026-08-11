@@ -37,7 +37,7 @@ public class MoveButton : MonoBehaviour
         SetSelected(false);
     }
 
-    private void OEnable()
+    private void OnEnable()
     {
         SetSelected(false);
     }

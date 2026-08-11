@@ -74,9 +74,7 @@ public class MoveSelectionUI : MonoBehaviour
             GameObject buttonObj = Instantiate(moveButtonPrefab, column);
             buttonObj.name = move.moveId;
             MoveButton moveButton = buttonObj.GetComponent<MoveButton>();
-            var targetOwner = owner != null ? owner : FindFirstObjectByType<PlayerController>();
-            moveButton.Initialize(move, isControllable, targetOwner, this);
-            Debug.Log("Move name: " + moveButton.moveName);
+            moveButton.Initialize(move, isControllable, owner, this);
             allMoveButton.Add(moveButton);
         }
     }
@@ -84,11 +82,22 @@ public class MoveSelectionUI : MonoBehaviour
     private void OnEnable()
     {
         ClearSelection();
+        StartCoroutine(RefreshButtonsNextFrame());
+    }
+
+    private IEnumerator<Null> RefreshButtonsNextFrame()
+    {
+        yield return null;
+        RefreshButtons();
+    }
+
+    private void RefreshButtons()
+    {
+        if (owner == null) return;
         foreach (MoveButton moveButton in allMoveButton)
         {
-            if (moveButton.IsUsable())
-                moveButton.gameObject.SetActive(true);
-            else
+            moveButton.gameObject.SetActive(true);
+            if (!moveButton.IsUsable())
                 moveButton.gameObject.SetActive(false);
         }
     }

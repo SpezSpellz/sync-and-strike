@@ -15,7 +15,10 @@ MonoBehaviour:
   move: 0
   moveId: dash
   moveName: Dash
+  onlyGrounded: 1
+  usableInKnockedback: 0
   icon: {fileID: -7848039375673857549, guid: 0b40fc3d9c4487143804b43d851a7800, type: 3}
+  requiredInput: 0
   frames:
   - {fileID: -1291688497, guid: 04dd565d3f46b414ca3ba3c130551d71, type: 3}
   loop: 0
