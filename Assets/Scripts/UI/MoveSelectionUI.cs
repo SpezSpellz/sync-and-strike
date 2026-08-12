@@ -82,17 +82,6 @@ public class MoveSelectionUI : MonoBehaviour
     private void OnEnable()
     {
         ClearSelection();
-        StartCoroutine(RefreshButtonsNextFrame());
-    }
-
-    private IEnumerator<Null> RefreshButtonsNextFrame()
-    {
-        yield return null;
-        RefreshButtons();
-    }
-
-    private void RefreshButtons()
-    {
         if (owner == null) return;
         foreach (MoveButton moveButton in allMoveButton)
         {
@@ -166,5 +155,7 @@ public class MoveSelectionUI : MonoBehaviour
             selectedMoveButton.SetSelected(false);
             selectedMoveButton = null;
         }
+        if (owner != null)
+            owner.HideMovePreview();
     }
 }

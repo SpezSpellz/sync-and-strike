@@ -5,6 +5,7 @@ public class CharacterAnimation : MonoBehaviour
 {
     private AnimationData[] animations;
     [SerializeField] private SpriteRenderer spriteRenderer;
+    private SpriteRenderer previewRenderer;
     private Action<FrameEvent> onFrameEvent;
     private CharacterPhysics physics;
 
@@ -13,9 +14,30 @@ public class CharacterAnimation : MonoBehaviour
     private int frameCounter = 1;
     private Action onAnimationComplete;
 
+    private AnimationData previewMove;
+    private int previewFrame;
+    private float previewFrameTimer;
+    private const float PREVIEW_FRAME_DURATION = 0.08f;
+
     private void Awake()
     {
         Debug.Log($"SpriteRenderer: {spriteRenderer}");
+        EnsurePreviewRenderer();
+    }
+
+    private void EnsurePreviewRenderer()
+    {
+        if (previewRenderer != null)
+            return;
+
+        var previewObj = new GameObject("MovePreview");
+        previewObj.transform.SetParent(spriteRenderer.transform, false);
+
+        previewRenderer = previewObj.AddComponent<SpriteRenderer>();
+        previewRenderer.sortingLayerID = spriteRenderer.sortingLayerID;
+        previewRenderer.sortingOrder = spriteRenderer.sortingOrder - 1;
+        previewRenderer.color = new Color(0f, 0f, 0f, 0.35f);
+        previewRenderer.gameObject.SetActive(false);
     }
 
     public void Initialize(AnimationData[] data, Action<FrameEvent> onFrameEvent, CharacterPhysics physics)
@@ -23,6 +45,41 @@ public class CharacterAnimation : MonoBehaviour
         animations = data;
         this.onFrameEvent = onFrameEvent;
         this.physics = physics;
+    }
+
+    public void UpdatePreview()
+    {
+        if (previewMove == null) return;
+        if (TurnManager.Instance != null && TurnManager.Instance.Phase != TurnPhase.Planning)
+            return;
+
+        if (previewMove.frames == null || previewMove.frames.Length == 0)
+            return;
+
+        previewFrameTimer += Time.deltaTime;
+        while (previewFrameTimer >= PREVIEW_FRAME_DURATION)
+        {
+            previewFrameTimer -= PREVIEW_FRAME_DURATION;
+            previewFrame = (previewFrame + 1) % previewMove.frames.Length;
+            previewRenderer.sprite = previewMove.frames[previewFrame];
+        }
+    }
+
+    public void ShowPreview(AnimationData moveData)
+    {
+        previewMove = moveData;
+        previewFrame = 0;
+        previewFrameTimer = 0f;
+        EnsurePreviewRenderer();
+        previewRenderer.sprite = previewMove.frames.Length > 0 ? previewMove.frames[0] : null;
+        previewRenderer.gameObject.SetActive(true);
+    }
+
+    public void HidePreview()
+    {
+        previewMove = null;
+        if (previewRenderer != null)
+            previewRenderer.gameObject.SetActive(false);
     }
 
     public void Step()

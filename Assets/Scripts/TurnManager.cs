@@ -111,6 +111,7 @@ public class TurnManager : MonoBehaviour
             UIManager.Instance.HideMoveUI();
             foreach (var player_turn_data in players.getList())
             {
+                player_turn_data.player.HideMovePreview();
                 player_turn_data.player.ExecuteMove(player_turn_data.submitted_move ?? "continue", () => {
                     if (Phase != TurnPhase.Simulating) return;
                     

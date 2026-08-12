@@ -56,7 +56,7 @@ public class MoveButton : MonoBehaviour
 
     private void OnMoveButtonPressed()
     {
-        if (!isControllable) return;
+        if (owner == null) return;
         if (TurnManager.Instance == null) return;
         if (TurnManager.Instance.Phase != TurnPhase.Planning) return;
         if (!IsUsable()) return;
@@ -65,13 +65,18 @@ public class MoveButton : MonoBehaviour
         if (IsSelected)
         {
             parentUI.ClearSelection();
-            owner.SelectMove("continue");
+            if (isControllable)
+            {
+                owner.SelectMove("continue");
+            }
+            owner.HideMovePreview();
             JumpWheel.Instance.Hide();
             return;
         }
 
         parentUI.SelectMoveButton(this);
         nameText.text = moveName; // set the text above to the column
+        owner.ShowMovePreview(data);
 
         Debug.Log($"data: {this.data}");
         Debug.Log($"nameText: {nameText}");
@@ -80,7 +85,10 @@ public class MoveButton : MonoBehaviour
         switch (this.data.requiredInput)
         {
             case RequiredInput.None:
-                if (owner != null) owner.SelectMove(moveId);
+                if (isControllable)
+                {
+                    owner.SelectMove(moveId);
+                }
                 JumpWheel.Instance.Hide();
                 break;
             case RequiredInput.JumpWheel:

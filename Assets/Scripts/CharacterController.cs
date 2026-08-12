@@ -66,6 +66,7 @@ public class CharacterController : MonoBehaviour
     private void Update()
     {
         physics.DetectGround();
+        anim.UpdatePreview();
     }
 
     public virtual void Start()
@@ -118,7 +119,10 @@ public class CharacterController : MonoBehaviour
         this.transform.localScale = savedata.localScale;
         this.IsKnockedBack = false;
         this.IsBusy = false;
+        physics.DetectGround();
+        HideMovePreview();
     }
+
     private void onFrameEvent(FrameEvent frameEvent)
     {
         switch (frameEvent.type)
@@ -260,5 +264,16 @@ public class CharacterController : MonoBehaviour
         var move = characterData.GetMove(moveId);
         if (move != null && !move.continuousImpulse) // if the move has an impulse and isn't continuous, apply it immediately. if it's continuous, the impulse will be applied in the CharacterAnimation's Step function.
             physics.ApplyImpulse(move.impulse);
+    }
+
+    public void ShowMovePreview(AnimationData moveData)
+    {
+        if (moveData == null) return;
+        anim.ShowPreview(moveData);
+    }
+
+    public void HideMovePreview()
+    {
+        anim.HidePreview();
     }
 }
