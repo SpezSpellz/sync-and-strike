@@ -26,7 +26,7 @@ public class PhysicsManager : MonoBehaviour
         collider.setId(-1);
     }
 
-    public void StepFor(PhysicsCollider collider)
+    public void StepFor(PhysicsCollider collider, IndexSet<PhysicsCollider> objects = null)
     {
         Vector2 velo = collider.getVelocity();
         var velo_copy = velo;
@@ -34,7 +34,8 @@ public class PhysicsManager : MonoBehaviour
         int tries = 0;
         while(tries < 10 && velo.sqrMagnitude > 0.00001)
         {
-            var (tar, vert) = this.getClampedPosition(collider, velo);
+            var (tar, vert) = this.getClampedPosition(collider, velo, objects);
+            Debug.Log($"Clamped position is {(tar, vert)}");
             beg += tar;
             var collided = (velo - tar).sqrMagnitude > 0.00001;
             velo -= tar;
@@ -60,16 +61,17 @@ public class PhysicsManager : MonoBehaviour
             velo.y -= GRAVITY;
         }
         collider.setVelocity(velo.x, velo.y);
+        Debug.Log($"Set position: {collider.getPosition()}, velocity: {collider.getVelocity()}");
     }
 
-    private (Vector2, bool) getClampedPosition(PhysicsCollider collider, Vector2 velo)
+    private (Vector2, bool) getClampedPosition(PhysicsCollider collider, Vector2 velo, IndexSet<PhysicsCollider> objects)
     {
         bool vert = false;
         AABB aabb = collider.getBoundingBox();
         if (aabb == null || velo.sqrMagnitude == 0)
             return (Vector2.zero, false);
         float dist = float.PositiveInfinity;
-        foreach (PhysicsCollider otherCollider in this.physicsObjects.getList())
+        foreach (PhysicsCollider otherCollider in objects == null ? this.physicsObjects.getList() : objects.getList())
         {
             if (collider == otherCollider)
                 continue;

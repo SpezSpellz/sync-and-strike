@@ -12,9 +12,11 @@ public class CharacterController : MonoBehaviour
     private CharacterAnimation anim;
     private CharacterPhysics physics;
     private CharacterData characterData;
+    private PreviewController previewController;
     private bool blocking = false;
     public int id {  get; private set; }
     public bool IsGrounded => physics != null && physics.IsGrounded;
+    public AnimationData[] animations => characterData.animations;
     public bool IsBusy { get; private set; } = false;
     public bool IsKnockedBack { get; private set; } = false;
     public string SelectedMove { get; private set; } = CONTINUE;
@@ -61,16 +63,24 @@ public class CharacterController : MonoBehaviour
         physics = GetComponent<CharacterPhysics>();
         characterData = GetComponent<CharacterData>();
         physics.Initialize(characterData);
+        previewController = GetComponentInChildren<PreviewController>();
     }
 
     private void Update()
     {
         physics.DetectGround();
-        anim.UpdatePreview();
     }
 
     public virtual void Start()
     {
+        if (previewController != null)
+        {
+            previewController.Initialize(characterData);
+        }
+        else
+        {
+            Debug.LogWarning("PreviewController not found on character children");
+        }
         anim.Initialize(characterData.animations, this.onFrameEvent, physics);
         this.id = TurnManager.Instance.RegisterPlayer(this);
         Debug.Log(name + " is grounded " + IsGrounded);
@@ -268,12 +278,12 @@ public class CharacterController : MonoBehaviour
 
     public void ShowMovePreview(AnimationData moveData)
     {
-        if (moveData == null) return;
-        anim.ShowPreview(moveData);
+        previewController?.StopPreview();
+        previewController?.StartPreview(moveData, this);
     }
 
     public void HideMovePreview()
     {
-        anim.HidePreview();
+        previewController?.StopPreview();
     }
 }

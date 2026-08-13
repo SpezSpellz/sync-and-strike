@@ -33,6 +33,7 @@ public class MoveSelectionUI : MonoBehaviour
     public bool isControllable = true;
 
     private int nameBoxHeight = 20;
+    private bool firstStart = true;
 
 
     private void Awake()
@@ -86,8 +87,16 @@ public class MoveSelectionUI : MonoBehaviour
         foreach (MoveButton moveButton in allMoveButton)
         {
             moveButton.gameObject.SetActive(true);
+            if (firstStart) 
+            {
+                firstStart = false;
+                return;
+            }
             if (!moveButton.IsUsable())
+            {
+                Debug.Log(moveButton.moveName + " is unusable for " + owner.name);
                 moveButton.gameObject.SetActive(false);
+            }
         }
     }
 

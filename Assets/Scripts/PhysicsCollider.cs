@@ -4,9 +4,11 @@ using UnityEngine;
 public abstract class PhysicsCollider : MonoBehaviour
 {
     int colliderId = -1;
+    public bool skipPhysicsManagerRegistration = false;
     public virtual void Start()
     {
-        this.colliderId = PhysicsManager.Instance.RegisterCollider(this);
+        if (!skipPhysicsManagerRegistration)
+            this.colliderId = PhysicsManager.Instance.RegisterCollider(this);
     }
 
     public int getId()

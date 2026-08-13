@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-public class CharacterAnimation : MonoBehaviour
+public class PreviewAnimator : MonoBehaviour
 {
     private AnimationData[] animations;
     [SerializeField] private SpriteRenderer spriteRenderer;
@@ -27,7 +27,6 @@ public class CharacterAnimation : MonoBehaviour
 
     public void Step()
     {
-        if (TurnManager.Instance.Phase != TurnPhase.Simulating) return; // If the player is still choosing, don't advance the frame.
         if (current == null) return; // If no animation is loaded, don't advance the frame. SAFE GUARD SINCE IF ANIMATIONDATA ISN'T LOADED PROPERLY UNITY WILL BREAK
         if (current.frames.Length == 0) return; // If an animationData exists but has no sprites in the frames array.
 
@@ -50,10 +49,20 @@ public class CharacterAnimation : MonoBehaviour
                 currentFrame = 0;
                 Debug.Log($"Playing {moveId} — {current.frames.Length} frames");
                 onAnimationComplete = onComplete;
+                spriteRenderer.sprite = current.frames[0];
                 return;
             }
         }
         Debug.LogWarning($"No animation found for moveId: {moveId}");
+    }
+
+    public void PlayMove(AnimationData anim, Action onComplete = null)
+    {
+        current = anim;
+        currentFrame = 0;
+        Debug.Log($"Playing {anim.moveId} — {current.frames.Length} frames");
+        onAnimationComplete = onComplete;
+        spriteRenderer.sprite = current.frames[0];
     }
 
     private void AdvanceFrame()
@@ -103,5 +112,10 @@ public class CharacterAnimation : MonoBehaviour
         }
 
         currentFrame++;
+    }
+
+    public void ClearSprite()
+    {
+        spriteRenderer.sprite = null;
     }
 }
