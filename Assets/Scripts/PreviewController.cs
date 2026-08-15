@@ -28,7 +28,7 @@ public class PreviewController : MonoBehaviour
     public void Initialize(CharacterData characterData)
     {
         data = characterData;
-        previewPhysics.Initialize(characterData);
+        previewPhysics.Initialize(characterData, true);
         previewRenderer.color = new Color(0f, 0f, 0f, 0.35f);
         previewRenderer.gameObject.SetActive(false);
         foreach (var collider in physicsObjects)
@@ -169,13 +169,13 @@ public class PreviewController : MonoBehaviour
         //     }
         // }
 
-        PreviewPhysicsManager.Instance.StepFor(previewPhysics);
-        var currentVelo = previewPhysics.getVelocity();
-        previewPhysics.setVelocity(
-            Mathf.Clamp(currentVelo.x * 0.8f, -12f, 12f),
-            Mathf.Clamp(currentVelo.y, -18f, 18f)
-        );
-        // previewPhysics.Step();
+        // PreviewPhysicsManager.Instance.StepFor(previewPhysics);
+        // var currentVelo = previewPhysics.getVelocity();
+        // previewPhysics.setVelocity(
+        //     Mathf.Clamp(currentVelo.x * 0.8f, -12f, 12f),
+        //     Mathf.Clamp(currentVelo.y, -18f, 18f)
+        // );
+        previewPhysics.Step();
         transform.position = previewPhysics.getPosition();
 
         SubmitPreviewHurtBox();
@@ -222,6 +222,9 @@ public class PreviewController : MonoBehaviour
 
     private void SpawnPreviewHitbox(HitboxData data)
     {
+        if (data.damage == 0 && data.knockback == Vector2.zero) return;
+        if (data.width <= 0f || data.height <= 0f) return;
+        
         float facing = previewPhysics.FacingDirection().x;
         Vector2 pos = previewPhysics.getPosition();
 
@@ -248,6 +251,21 @@ public class PreviewController : MonoBehaviour
 
     public void ApplyPreviewKnockback(Vector2 knockback)
     {
-        previewPhysics.AddVelocity(knockback);
+        if (knockback == Vector2.zero)
+            return;
+
+        Vector2 adjustedKnockback = knockback;
+
+        if (owner != null)
+        {
+            Vector2 diVector = new Vector2(
+                Mathf.Cos(owner.KnockbackIndirectionDirection),
+                Mathf.Sin(owner.KnockbackIndirectionDirection)
+            );
+
+            adjustedKnockback += diVector * (owner.KnockbackIndirectionPower * knockback.magnitude * 0.98f);
+        }
+
+        previewPhysics.AddVelocity(adjustedKnockback);
     }
 }

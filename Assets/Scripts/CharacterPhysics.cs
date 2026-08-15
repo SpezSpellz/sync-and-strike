@@ -9,11 +9,13 @@ public class CharacterPhysics : PhysicsCollider
     private CharacterData characterData;
     private float veloX = 0.0f;
     private float veloY = 0.0f;
+    private bool isPreview = false;
     public bool IsGrounded { get; private set; } = true;
 
-    public void Initialize(CharacterData characterData)
+    public void Initialize(CharacterData characterData, bool isPreview = false)
     {
         this.characterData = characterData;
+        this.isPreview = isPreview;
     }
     public void ApplyImpulse(Vector2 impulse)
     {
@@ -66,7 +68,14 @@ public class CharacterPhysics : PhysicsCollider
 
     public override void Step()
     {
-        PhysicsManager.Instance.StepFor(this);
+        if (isPreview)
+        {
+            PreviewPhysicsManager.Instance.StepFor(this);
+        }
+        else
+        {
+            PhysicsManager.Instance.StepFor(this);
+        }
         this.veloX *= 0.8f;
     }
 

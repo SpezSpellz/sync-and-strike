@@ -6,6 +6,8 @@ public class PreviewManager : MonoBehaviour
 {
     public static PreviewManager Instance { get; private set; }
     private readonly List<PreviewController> previews = new();
+    private const float SIMULATION_STEP = 1f / 60f;
+    private float accumulator;
 
     private void Awake() => Instance = this;
 
@@ -32,8 +34,16 @@ public class PreviewManager : MonoBehaviour
 
     private void Update()
     {
-        // step previews (they advance animation + call preview-physics)
-        foreach (var p in previews.ToList()) p.Step(Time.deltaTime);
+        accumulator += Time.deltaTime;
+
+        while (accumulator >= SIMULATION_STEP)
+        {
+            // step previews (they advance animation + call preview-physics)
+            foreach (var p in previews.ToList())
+                p.Step(SIMULATION_STEP);
+
+            accumulator -= SIMULATION_STEP;
+        }
 
         // after stepping, resolve preview hitboxes
         PreviewHitboxManager.Instance.Step();
