@@ -63,6 +63,17 @@ public class DI : MonoBehaviour, IDragHandler, IPointerDownHandler, IPointerUpHa
         }
     }
 
+    private void ApplyDIState()
+    {
+        if (player == null) return;
+
+        player.setKnockbackInfo(currentPower, currentDirection);
+
+        // refresh the active preview immediately
+        if (PreviewManager.Instance != null)
+            PreviewManager.Instance.RestartAllPreviews();
+    }
+
     private void UpdateInput(Vector2 screenPosition)
     {
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
@@ -83,5 +94,6 @@ public class DI : MonoBehaviour, IDragHandler, IPointerDownHandler, IPointerUpHa
 
         // move indicator
         indicator.anchoredPosition = localPoint;
+        ApplyDIState();
     }
 }

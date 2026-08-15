@@ -16,6 +16,7 @@ public class JumpWheel : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoin
     private bool isActive = false;
     private float currentPower = 0f;
     private float currentDirection = Mathf.PI / 2f; // default straight up
+    private string moveId = "jump";
     private PlayerController player;
 
     // clamp constants matching your friend's values
@@ -32,8 +33,9 @@ public class JumpWheel : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoin
         gameObject.SetActive(false);
     }
 
-    public void Show()
+    public void Show(string moveId = "jump")
     {
+        this.moveId = moveId;
         gameObject.SetActive(true);
         // offset origin to bottom of wheel, wheel darius divide by 2 because the wheel is not a full circle, only upper half, so going from middle (of the upper half) to bottom is only half of the full circle radius
         indicator.anchoredPosition = new Vector2(0, 0);
@@ -66,8 +68,19 @@ public class JumpWheel : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoin
         if (currentPower > 0)
         {
             player.setJumpInfo(currentPower, currentDirection);
-            player.SelectMove("jump");
+            player.SelectMove(moveId);
         }
+    }
+
+    private void ApplyJumpState()
+    {
+        if (player == null) return;
+
+        player.setJumpInfo(currentPower, currentDirection);
+
+        // refresh the active preview immediately
+        if (PreviewManager.Instance != null)
+            PreviewManager.Instance.RestartAllPreviews();
     }
 
     private void UpdateInput(Vector2 screenPosition)
@@ -83,6 +96,7 @@ public class JumpWheel : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoin
             float clampedX = Mathf.Clamp(localPoint.x, -wheelRadius, wheelRadius);
             float indicatorX = Mathf.Clamp(Mathf.Abs(clampedX), deadZoneRadius, wheelRadius) * Mathf.Sign(clampedX);
             indicator.anchoredPosition = new Vector2(indicatorX, floorRestriction - wheelRadius / 2f);
+            ApplyJumpState();
             return;
         }
 
@@ -105,6 +119,7 @@ public class JumpWheel : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoin
         if (distance < deadZoneRadius)
         {
             currentPower = 0f;
+            ApplyJumpState();
             return;
         }
 
@@ -115,5 +130,6 @@ public class JumpWheel : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoin
         // direction
         float angle = Mathf.Atan2(clampedPoint.y, clampedPoint.x);
         currentDirection = Mathf.Clamp(angle, MIN_DIRECTION, MAX_DIRECTION);
+        ApplyJumpState();
     }
 }

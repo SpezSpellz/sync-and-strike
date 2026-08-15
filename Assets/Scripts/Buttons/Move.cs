@@ -92,7 +92,7 @@ public class MoveButton : MonoBehaviour
                 JumpWheel.Instance.Hide();
                 break;
             case RequiredInput.JumpWheel:
-                JumpWheel.Instance.Show();
+                JumpWheel.Instance.Show(moveId);
                 break;
             /*
             case RequiredInput.DirectionWheel:
