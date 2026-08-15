@@ -11,12 +11,13 @@ public class PreviewController : MonoBehaviour
     private AnimationData moveData;
     private int frameIndex;
     private float frameTimer;
+    private float previewTimer;
     private bool active;
+    private bool processedEventsThisCycle;
     private CharacterController owner;
     public CharacterController Owner => owner;
-    private Vector2 lastVelocity;
-
-    private const float FRAME_TIME = 0.08f;
+    private const float FRAME_TIME = 1f / 60f;
+    private const float PREVIEW_LIFETIME = 3f; // preview stays alive for 3 seconds
 
     private void Awake()
     {
@@ -38,12 +39,17 @@ public class PreviewController : MonoBehaviour
 
     private void Preview()
     {
+        if (owner == null || moveData == null)
+            return;
+
         transform.SetParent(null);
         frameIndex = 0;
         frameTimer = 0f;
+        previewTimer = 0f;
+        processedEventsThisCycle = false;
         active = true;
         previewRenderer.gameObject.SetActive(true);
-        previewRenderer.sprite = moveData.frames[frameIndex];
+        previewRenderer.sprite = moveData.frames[0];
 
         // ProcessPreviewFrameEvents(frameIndex);
         // SubmitPreviewHurtBox();
@@ -55,15 +61,22 @@ public class PreviewController : MonoBehaviour
         transform.localScale = owner.transform.localScale;
         previewPhysics.setPosition(ownerPosition.x, ownerPosition.y);
         previewPhysics.setVelocity(ownerVelocity.x, ownerVelocity.y);
+        previewPhysics.DetectGround();
         if (moveData != null && !moveData.continuousImpulse) // if the move has an impulse and isn't continuous, apply it immediately. if it's continuous, the impulse will be applied in the CharacterAnimation's Step function.
             previewPhysics.ApplyImpulse(moveData.impulse);
-        Debug.Log($"Current velo after impulse but before stepping: {previewPhysics.getVelocity()}");
     }
 
     public void StartPreview(AnimationData animationData, CharacterController owner)
     {
         this.owner = owner;
         moveData = animationData;
+        
+        if (owner == null || moveData == null || moveData.frames == null || moveData.frames.Length == 0)
+        {
+            Debug.LogWarning("Cannot start preview: invalid move data or owner.");
+            return;
+        }
+
         Preview();
         PreviewManager.Instance.RegisterPreview(this);
         PreviewPhysicsManager.Instance.Register(previewPhysics);
@@ -84,22 +97,69 @@ public class PreviewController : MonoBehaviour
         Preview();
     }
 
-    public void Step(float deltaTime)
+    public void Step(float deltaTime = 1f / 60f)
     {
         if (!active || moveData == null) return;
+
+        previewTimer += deltaTime;
+
+        // Restart after 5s instead of frame-cycle completion
+        if (previewTimer >= PREVIEW_LIFETIME)
+        {
+            previewTimer = 0f;
+            PreviewManager.Instance.RestartAllPreviews();
+            return;
+        }
 
         frameTimer += deltaTime;
         if (frameTimer >= FRAME_TIME)
         {
             frameTimer -= FRAME_TIME;
-            frameIndex = (frameIndex + 1) % moveData.frames.Length;
-            previewRenderer.sprite = moveData.frames[frameIndex];
-            ProcessPreviewFrameEvents(frameIndex);
+            int previousFrame = frameIndex;
+            int lastFrame = moveData.frames.Length - 1;
+            if (frameIndex < lastFrame)
+            {
+                frameIndex++;
+                previewRenderer.sprite = moveData.frames[frameIndex];
+
+                if (moveData.frames.Length == 1)
+                {
+                    if (!processedEventsThisCycle)
+                    {
+                        ProcessPreviewFrameEvents(frameIndex);
+                        processedEventsThisCycle = true;
+                    }
+                }
+                else if (frameIndex != previousFrame)
+                {
+                    ProcessPreviewFrameEvents(frameIndex);
+                }
+            }
+            else
+            {
+                // Hold on the final frame until lifetime expires
+                frameIndex = lastFrame;
+                previewRenderer.sprite = moveData.frames[frameIndex];
+            }
         }
 
+        previewPhysics.DetectGround();
+
+        bool hasJumpEventThisFrame = false;
+        if (moveData.events != null)
+        {
+            foreach (var e in moveData.events)
+            {
+                if (e.frame == frameIndex && e.type == FrameEventType.Jump)
+                {
+                    hasJumpEventThisFrame = true;
+                    break;
+                }
+            }
+        }
         // if (moveData.impulse != Vector2.zero)
         // {
-        if (moveData.continuousImpulse)
+        if (moveData.continuousImpulse && !hasJumpEventThisFrame)
         {
             previewPhysics.ApplyImpulse(moveData.impulse);
         }
@@ -111,7 +171,10 @@ public class PreviewController : MonoBehaviour
 
         PreviewPhysicsManager.Instance.StepFor(previewPhysics);
         var currentVelo = previewPhysics.getVelocity();
-        previewPhysics.setVelocity(currentVelo.x * 0.8f, currentVelo.y);
+        previewPhysics.setVelocity(
+            Mathf.Clamp(currentVelo.x * 0.8f, -12f, 12f),
+            Mathf.Clamp(currentVelo.y, -18f, 18f)
+        );
         // previewPhysics.Step();
         transform.position = previewPhysics.getPosition();
 
@@ -187,6 +250,4 @@ public class PreviewController : MonoBehaviour
     {
         previewPhysics.AddVelocity(knockback);
     }
-
-    public bool IsFinishedOneCycle => frameIndex == moveData.frames.Length - 1;
 }

@@ -208,6 +208,11 @@ public class CharacterController : MonoBehaviour
         }
 
         var move = characterData.GetMove(moveId);
+        if (move == null)
+        {
+            SelectedMove = CONTINUE;
+            return false;
+        }
         if (!CanUseMove(move))
         {
             SelectedMove = CONTINUE;
@@ -278,6 +283,7 @@ public class CharacterController : MonoBehaviour
 
     public void ShowMovePreview(AnimationData moveData)
     {
+        PreviewManager.Instance.RestartAllPreviews();
         previewController?.StopPreview();
         previewController?.StartPreview(moveData, this);
     }

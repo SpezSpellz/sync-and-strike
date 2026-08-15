@@ -35,7 +35,6 @@ public class PhysicsManager : MonoBehaviour
         while(tries < 10 && velo.sqrMagnitude > 0.00001)
         {
             var (tar, vert) = this.getClampedPosition(collider, velo, objects);
-            Debug.Log($"Clamped position is {(tar, vert)}");
             beg += tar;
             var collided = (velo - tar).sqrMagnitude > 0.00001;
             velo -= tar;
@@ -61,7 +60,6 @@ public class PhysicsManager : MonoBehaviour
             velo.y -= GRAVITY;
         }
         collider.setVelocity(velo.x, velo.y);
-        Debug.Log($"Set position: {collider.getPosition()}, velocity: {collider.getVelocity()}");
     }
 
     private (Vector2, bool) getClampedPosition(PhysicsCollider collider, Vector2 velo, IndexSet<PhysicsCollider> objects)

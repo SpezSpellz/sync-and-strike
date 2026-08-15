@@ -9,23 +9,34 @@ public class PreviewManager : MonoBehaviour
 
     private void Awake() => Instance = this;
 
-    public void RegisterPreview(PreviewController preview) => previews.Add(preview);
-    public void UnregisterPreview(PreviewController preview) => previews.Remove(preview);
+    public void RegisterPreview(PreviewController preview)
+    {
+        if (preview == null || previews.Contains(preview))
+            return;
+        previews.Add(preview);
+    }
+    public void UnregisterPreview(PreviewController preview)
+    {
+        if (preview == null) return;
+        previews.Remove(preview);
+    }
+
+    public void RestartAllPreviews()
+    {
+        foreach (var p in previews.ToList())
+        {
+            if (p != null)
+                p.Restart();
+        }
+    }
 
     private void Update()
     {
         // step previews (they advance animation + call preview-physics)
-        var dt = Time.deltaTime;
-        foreach (var p in previews.ToList()) p.Step(dt);
+        foreach (var p in previews.ToList()) p.Step(Time.deltaTime);
 
         // after stepping, resolve preview hitboxes
         PreviewHitboxManager.Instance.Step();
-
-        // sync-loop logic: when every preview reached end-of-cycle, restart them all
-        if (previews.Count > 0 && previews.All(p => p.IsFinishedOneCycle))
-        {
-            foreach (var p in previews) p.Restart();
-        }
     }
 
     public PreviewController GetPreviewByOwner(CharacterController owner)

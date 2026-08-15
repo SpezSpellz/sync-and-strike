@@ -53,6 +53,7 @@ public class Flip : MonoBehaviour
         bool shouldFlipTo = !currentlyFlipped;
 
         player.Flip(shouldFlipTo);
+        PreviewManager.Instance.RestartAllPreviews();
         UpdateVisual(isOn);
     }
 
