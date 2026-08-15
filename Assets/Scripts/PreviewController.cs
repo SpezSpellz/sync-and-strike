@@ -115,31 +115,34 @@ public class PreviewController : MonoBehaviour
         if (frameTimer >= FRAME_TIME)
         {
             frameTimer -= FRAME_TIME;
-            int previousFrame = frameIndex;
-            int lastFrame = moveData.frames.Length - 1;
-            if (frameIndex < lastFrame)
+        
+            if (moveData.frames.Length == 1)
             {
-                frameIndex++;
-                previewRenderer.sprite = moveData.frames[frameIndex];
-
-                if (moveData.frames.Length == 1)
-                {
-                    if (!processedEventsThisCycle)
-                    {
-                        ProcessPreviewFrameEvents(frameIndex);
-                        processedEventsThisCycle = true;
-                    }
-                }
-                else if (frameIndex != previousFrame)
+                if (!processedEventsThisCycle)
                 {
                     ProcessPreviewFrameEvents(frameIndex);
+                    processedEventsThisCycle = true;
                 }
             }
             else
             {
-                // Hold on the final frame until lifetime expires
-                frameIndex = lastFrame;
-                previewRenderer.sprite = moveData.frames[frameIndex];
+                int previousFrame = frameIndex;
+                int lastFrame = moveData.frames.Length - 1;
+                if (frameIndex < lastFrame)
+                {
+                    frameIndex++;
+                    previewRenderer.sprite = moveData.frames[frameIndex];
+                    if (frameIndex != previousFrame)
+                    {
+                        ProcessPreviewFrameEvents(frameIndex);
+                    }
+                }
+                else
+                {
+                    // Hold on the final frame until lifetime expires
+                    frameIndex = lastFrame;
+                    previewRenderer.sprite = moveData.frames[frameIndex];
+                }
             }
         }
 
@@ -224,7 +227,7 @@ public class PreviewController : MonoBehaviour
     {
         if (data.damage == 0 && data.knockback == Vector2.zero) return;
         if (data.width <= 0f || data.height <= 0f) return;
-        
+
         float facing = previewPhysics.FacingDirection().x;
         Vector2 pos = previewPhysics.getPosition();
 
