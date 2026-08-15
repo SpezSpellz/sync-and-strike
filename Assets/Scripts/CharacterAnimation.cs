@@ -9,7 +9,10 @@ public class CharacterAnimation : MonoBehaviour
     private CharacterPhysics physics;
 
     private AnimationData current;
-    private int currentFrame;   
+    public AnimationData CurrentMove => current;
+    public bool HasActiveMove => current != null;
+    private int currentFrame;
+    public int CurrentFrameIndex => currentFrame;
     private int frameCounter = 1;
     private Action onAnimationComplete;
 
@@ -103,5 +106,11 @@ public class CharacterAnimation : MonoBehaviour
         }
 
         currentFrame++;
+    }
+
+    public void ResetToIdle()
+    {
+        current = null;
+        currentFrame = 0;
     }
 }

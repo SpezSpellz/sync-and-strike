@@ -69,7 +69,7 @@ public class MoveButton : MonoBehaviour
             {
                 owner.SelectMove("continue");
             }
-            owner.HideMovePreview();
+            owner.ResumePreview();
             JumpWheel.Instance.Hide();
             return;
         }

@@ -25,6 +25,7 @@ public class CharacterController : MonoBehaviour
     public float KnockbackIndirectionDirection { get; private set; } = 0;
     public float KnockbackIndirectionPower { get; private set; } = 0;
     public Transform TargetPosition { get; protected set; }
+    public bool IsPreviewReady => previewController != null && characterData != null && anim != null;
 
     // Direction in radians
     public void setJumpInfo(float power, float direction)
@@ -286,6 +287,26 @@ public class CharacterController : MonoBehaviour
         PreviewManager.Instance.RestartAllPreviews();
         previewController?.StopPreview();
         previewController?.StartPreview(moveData, this);
+    }
+
+    public void ResumePreview()
+    {
+        PreviewManager.Instance.RestartAllPreviews();
+        previewController?.StopPreview();
+        if (anim.HasActiveMove)
+        {
+            previewController?.StartPreview(anim.CurrentMove, this, anim.CurrentFrameIndex, true);
+            return;
+        }
+
+        foreach (var move in characterData.animations)
+        {
+            if (move.moveId == "idle")
+            {
+                previewController?.StartPreview(move, this);
+                return;
+            }
+        }
     }
 
     public void HideMovePreview()

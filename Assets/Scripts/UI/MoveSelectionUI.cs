@@ -34,6 +34,7 @@ public class MoveSelectionUI : MonoBehaviour
 
     private int nameBoxHeight = 20;
     private bool firstStart = true;
+    private bool previewQueued;
 
 
     private void Awake()
@@ -84,7 +85,13 @@ public class MoveSelectionUI : MonoBehaviour
     {
         ClearSelection();
         if (owner == null) return;
-        foreach (MoveButton moveButton in allMoveButton)
+        if (owner.IsPreviewReady)
+        {
+            StartIdlePreview();
+            return;
+        }
+        previewQueued = true;
+            foreach (MoveButton moveButton in allMoveButton)
         {
             moveButton.gameObject.SetActive(true);
             if (firstStart) 
@@ -97,6 +104,32 @@ public class MoveSelectionUI : MonoBehaviour
                 Debug.Log(moveButton.moveName + " is unusable for " + owner.name);
                 moveButton.gameObject.SetActive(false);
             }
+        }
+    }
+
+    private void Update()
+    {
+        if (!previewQueued)
+            return;
+    
+        if (owner == null)
+            return;
+    
+        if (!owner.IsPreviewReady)
+            return;
+    
+        previewQueued = false;
+        StartIdlePreview();
+    }
+    
+    private void StartIdlePreview()
+    {
+        owner.ResumePreview();
+        foreach (MoveButton moveButton in allMoveButton)
+        {
+            moveButton.gameObject.SetActive(true);
+            if (!moveButton.IsUsable())
+                moveButton.gameObject.SetActive(false);
         }
     }
 

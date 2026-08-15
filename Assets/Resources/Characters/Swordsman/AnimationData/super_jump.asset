@@ -18,7 +18,7 @@ MonoBehaviour:
   onlyGrounded: 1
   usableInKnockedback: 0
   icon: {fileID: -16536359, guid: dbd3e3f859d69924db27efe5a7a3e930, type: 3}
-  requiredInput: 1
+  requiredInput: 0
   frames:
   - {fileID: -3803549920350246036, guid: 7d348868cf6199c4b88f14bdaf027d6a, type: 3}
   loop: 0

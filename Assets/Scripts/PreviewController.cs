@@ -9,6 +9,8 @@ public class PreviewController : MonoBehaviour
     private CharacterPhysics previewPhysics;
     private CharacterData data;
     private AnimationData moveData;
+    private int startFrame;
+    private bool resume;
     private int frameIndex;
     private float frameTimer;
     private float previewTimer;
@@ -16,7 +18,7 @@ public class PreviewController : MonoBehaviour
     private bool processedEventsThisCycle;
     private CharacterController owner;
     public CharacterController Owner => owner;
-    private const float FRAME_TIME = 1f / 60f;
+    private const float FRAME_TIME = 1f / 60f; // 60 fps
     private const float PREVIEW_LIFETIME = 3f; // preview stays alive for 3 seconds
 
     private void Awake()
@@ -30,9 +32,11 @@ public class PreviewController : MonoBehaviour
         data = characterData;
         previewPhysics.Initialize(characterData, true);
         previewRenderer.color = new Color(0f, 0f, 0f, 0.35f);
-        previewRenderer.gameObject.SetActive(false);
+        previewRenderer.gameObject.SetActive(true);
+        transform.SetParent(null);
         foreach (var collider in physicsObjects)
         {
+            // Register real world object that preview can collide to
             PreviewPhysicsManager.Instance.Register(collider);
         }
     }
@@ -42,17 +46,13 @@ public class PreviewController : MonoBehaviour
         if (owner == null || moveData == null)
             return;
 
-        transform.SetParent(null);
-        frameIndex = 0;
+        frameIndex = Mathf.Clamp(startFrame, 0, moveData.frames.Length - 1);
         frameTimer = 0f;
         previewTimer = 0f;
         processedEventsThisCycle = false;
         active = true;
         previewRenderer.gameObject.SetActive(true);
-        previewRenderer.sprite = moveData.frames[0];
-
-        // ProcessPreviewFrameEvents(frameIndex);
-        // SubmitPreviewHurtBox();
+        previewRenderer.sprite = moveData.frames[frameIndex];
 
         // Reset preview physics to owner start
         Vector2 ownerPosition = owner.GetPosition();
@@ -62,12 +62,14 @@ public class PreviewController : MonoBehaviour
         previewPhysics.setPosition(ownerPosition.x, ownerPosition.y);
         previewPhysics.setVelocity(ownerVelocity.x, ownerVelocity.y);
         previewPhysics.DetectGround();
-        if (moveData != null && !moveData.continuousImpulse) // if the move has an impulse and isn't continuous, apply it immediately. if it's continuous, the impulse will be applied in the CharacterAnimation's Step function.
+        if (moveData != null && !moveData.continuousImpulse && !resume) // if the move has an impulse and isn't continuous, apply it immediately. if it's continuous, the impulse will be applied in the CharacterAnimation's Step function.
             previewPhysics.ApplyImpulse(moveData.impulse);
     }
 
-    public void StartPreview(AnimationData animationData, CharacterController owner)
+    public void StartPreview(AnimationData animationData, CharacterController owner, int startFrame = 0, bool resume = false)
     {
+        this.resume = resume;
+        this.startFrame = startFrame;
         this.owner = owner;
         moveData = animationData;
         
@@ -160,24 +162,12 @@ public class PreviewController : MonoBehaviour
                 }
             }
         }
-        // if (moveData.impulse != Vector2.zero)
-        // {
+        
         if (moveData.continuousImpulse && !hasJumpEventThisFrame)
         {
             previewPhysics.ApplyImpulse(moveData.impulse);
         }
-        //     else if (frameIndex == 0)
-        //     {
-        //         previewPhysics.ApplyImpulse(moveData.impulse);
-        //     }
-        // }
 
-        // PreviewPhysicsManager.Instance.StepFor(previewPhysics);
-        // var currentVelo = previewPhysics.getVelocity();
-        // previewPhysics.setVelocity(
-        //     Mathf.Clamp(currentVelo.x * 0.8f, -12f, 12f),
-        //     Mathf.Clamp(currentVelo.y, -18f, 18f)
-        // );
         previewPhysics.Step();
         transform.position = previewPhysics.getPosition();
 
