@@ -7,24 +7,17 @@ public class DI : MonoBehaviour, IDragHandler, IPointerDownHandler, IPointerUpHa
     [Header("References")]
     [SerializeField] private RectTransform indicator;
     [SerializeField] private RectTransform wheelRect;
+    [SerializeField] private CharacterController owner;
+    [SerializeField] private bool isControllable = false;
 
     [Header("Settings")]
     [SerializeField] private float wheelRadius = 75f;
-
-    public static DI Instance { get; private set; }
 
     private float currentPower = 0f;
     private float currentDirection = Mathf.PI / 2f;
 
     private bool isActive = false;
-    private PlayerController player;
     private string pendingMoveId;
-
-    private void Awake()
-    {
-        Instance = this;
-        player = FindObjectOfType<PlayerController>();
-    }
 
     public void Show(string moveId)
     {
@@ -59,15 +52,16 @@ public class DI : MonoBehaviour, IDragHandler, IPointerDownHandler, IPointerUpHa
 
         if (currentPower > 0)
         {
-            player.setKnockbackInfo(currentPower, currentDirection);
+            if (owner == null) return;
+            owner.setKnockbackInfo(currentPower, currentDirection, !isControllable);
         }
     }
 
     private void ApplyDIState()
     {
-        if (player == null) return;
+        if (owner == null) return;
 
-        player.setKnockbackInfo(currentPower, currentDirection);
+        owner.setKnockbackInfo(currentPower, currentDirection, !isControllable);
 
         // refresh the active preview immediately
         if (PreviewManager.Instance != null)

@@ -13,6 +13,7 @@ public class MoveButton : MonoBehaviour
     private AnimationData data;
     private Button button;
     private MoveSelectionUI parentUI;
+    private JumpWheel jumpWheel;
     public bool IsSelected { get; private set; }
     private bool isControllable;
 
@@ -25,12 +26,13 @@ public class MoveButton : MonoBehaviour
         nameText = transform.parent.parent.Find("MoveName").GetComponent<TextMeshProUGUI>(); // get the text above
     }
 
-    public void Initialize(AnimationData data, bool isControllable, CharacterController owner, MoveSelectionUI parentUI)
+    public void Initialize(AnimationData data, bool isControllable, CharacterController owner, MoveSelectionUI parentUI, JumpWheel jumpWheel)
     {
         this.data = data;
         this.isControllable = isControllable;
         this.owner = owner;
         this.parentUI = parentUI;
+        this.jumpWheel = jumpWheel;
         moveId = data.moveId;
         moveName = data.moveName;
         icon.sprite = data.icon;
@@ -70,7 +72,7 @@ public class MoveButton : MonoBehaviour
                 owner.SelectMove("continue");
             }
             owner.ResumePreview();
-            JumpWheel.Instance.Hide();
+            jumpWheel.Hide();
             return;
         }
 
@@ -89,10 +91,10 @@ public class MoveButton : MonoBehaviour
                 {
                     owner.SelectMove(moveId);
                 }
-                JumpWheel.Instance.Hide();
+                jumpWheel.Hide();
                 break;
             case RequiredInput.JumpWheel:
-                JumpWheel.Instance.Show(moveId);
+                jumpWheel.Show(moveId);
                 break;
             /*
             case RequiredInput.DirectionWheel:

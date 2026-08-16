@@ -204,9 +204,9 @@ public class PreviewController : MonoBehaviour
                 case FrameEventType.Jump:
                     previewPhysics.AddVelocity(
                         new Vector2(
-                            Mathf.Cos(owner.JumpDirection),
-                            Mathf.Sin(owner.JumpDirection)
-                        ) * owner.JumpPower * 0.24f
+                            Mathf.Cos(owner.PreviewJumpDirection),
+                            Mathf.Sin(owner.PreviewJumpDirection)
+                        ) * owner.PreviewJumpPower * 0.24f
                     );
                     break;
             }
@@ -252,11 +252,11 @@ public class PreviewController : MonoBehaviour
         if (owner != null)
         {
             Vector2 diVector = new Vector2(
-                Mathf.Cos(owner.KnockbackIndirectionDirection),
-                Mathf.Sin(owner.KnockbackIndirectionDirection)
+                Mathf.Cos(owner.PreviewKnockbackIndirectionDirection),
+                Mathf.Sin(owner.PreviewKnockbackIndirectionDirection)
             );
 
-            adjustedKnockback += diVector * (owner.KnockbackIndirectionPower * knockback.magnitude * 0.98f);
+            adjustedKnockback += diVector * (owner.PreviewKnockbackIndirectionPower * knockback.magnitude * 0.98f);
         }
 
         previewPhysics.AddVelocity(adjustedKnockback);

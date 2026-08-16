@@ -22,24 +22,42 @@ public class CharacterController : MonoBehaviour
     public string SelectedMove { get; private set; } = CONTINUE;
     public float JumpDirection { get; private set; } = 1.5707963267948966f;
     public float JumpPower { get; private set; } = 1;
+    public float PreviewJumpDirection { get; private set; } = 1.5707963267948966f;
+    public float PreviewJumpPower { get; private set; } = 1f;
     public float KnockbackIndirectionDirection { get; private set; } = 0;
     public float KnockbackIndirectionPower { get; private set; } = 0;
+    public float PreviewKnockbackIndirectionDirection { get; private set; } = 0f;
+    public float PreviewKnockbackIndirectionPower { get; private set; } = 0f;
     public Transform TargetPosition { get; protected set; }
     public bool IsPreviewReady => previewController != null && characterData != null && anim != null;
 
     // Direction in radians
-    public void setJumpInfo(float power, float direction)
+    public void setJumpInfo(float power, float direction, bool previewOnly = true)
     {
-        this.JumpPower = Mathf.Clamp(power, 0.5f, 1f);
+        float clampedPower = Mathf.Clamp(power, 0.5f, 1f);
         // 30 degrees clamp
-        this.JumpDirection = Mathf.Clamp(direction, 0.5235987755982988f, 2.6179938779914944f);
+        float clampedDirection = Mathf.Clamp(direction, 0.5235987755982988f, 2.6179938779914944f);
+        if (!previewOnly)
+        {
+            JumpPower = clampedPower;
+            JumpDirection = clampedDirection;
+        }
+        PreviewJumpPower = clampedPower;
+        PreviewJumpDirection = clampedDirection;
     }
 
     // Direction in radians
-    public void setKnockbackInfo(float power, float direction)
+    public void setKnockbackInfo(float power, float direction, bool previewOnly = true)
     {
-        this.KnockbackIndirectionPower = Mathf.Clamp(power, 0f, 1f);
-        this.KnockbackIndirectionDirection = Mathf.Clamp(direction, 0f, 6.283185307179586f);
+        float clampedPower = Mathf.Clamp(power, 0f, 1f);
+        float clampedDirection = Mathf.Clamp(direction, 0f, 6.283185307179586f);
+        if (!previewOnly)
+        {
+            KnockbackIndirectionPower = clampedPower;
+            KnockbackIndirectionDirection = clampedDirection;
+        }
+        PreviewKnockbackIndirectionPower = clampedPower;
+        PreviewKnockbackIndirectionDirection = clampedDirection;
     }
 
     public void ApplyKnockback(Vector2 knockback)

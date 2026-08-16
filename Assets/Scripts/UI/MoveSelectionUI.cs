@@ -13,6 +13,7 @@ public class MoveSelectionUI : MonoBehaviour
     [SerializeField] private GameObject textButtonPrefab;
     [SerializeField] private GameObject toggleButtonPrefab;
     [SerializeField] private CharacterController owner;
+    [SerializeField] private JumpWheel jumpWheel;
 
 
     private Transform columnMovement;
@@ -76,7 +77,7 @@ public class MoveSelectionUI : MonoBehaviour
             GameObject buttonObj = Instantiate(moveButtonPrefab, column);
             buttonObj.name = move.moveId;
             MoveButton moveButton = buttonObj.GetComponent<MoveButton>();
-            moveButton.Initialize(move, isControllable, owner, this);
+            moveButton.Initialize(move, isControllable, owner, this, jumpWheel);
             allMoveButton.Add(moveButton);
         }
     }
@@ -84,6 +85,7 @@ public class MoveSelectionUI : MonoBehaviour
     private void OnEnable()
     {
         ClearSelection();
+        jumpWheel.Hide();
         if (owner == null) return;
         if (owner.IsPreviewReady)
         {

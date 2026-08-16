@@ -12,24 +12,21 @@ public class JumpWheel : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoin
     [SerializeField] private float wheelRadius = 100f;
     [SerializeField] private float deadZoneRadius = 50f;
     [SerializeField] private float floorRestriction = 15f;
+    [SerializeField] private CharacterController owner;
+    [SerializeField] private bool isControllable = false;
 
     private bool isActive = false;
     private float currentPower = 0f;
     private float currentDirection = Mathf.PI / 2f; // default straight up
     private string moveId = "jump";
-    private PlayerController player;
-
     // clamp constants matching your friend's values
     private const float MIN_POWER = 0.5f;
     private const float MAX_POWER = 1.0f;
     private const float MIN_DIRECTION = 0.5235987755982988f;  // 30 degrees
     private const float MAX_DIRECTION = 2.6179938779914944f;  // 150 degrees
-    public static JumpWheel Instance { get; private set; }
 
     private void Awake()
     {
-        Instance = this;
-        player = FindFirstObjectByType<PlayerController>();
         gameObject.SetActive(false);
     }
 
@@ -67,16 +64,20 @@ public class JumpWheel : MonoBehaviour, IDragHandler, IPointerDownHandler, IPoin
 
         if (currentPower > 0)
         {
-            player.setJumpInfo(currentPower, currentDirection);
-            player.SelectMove(moveId);
+            if (owner == null) return;
+
+            owner.setJumpInfo(currentPower, currentDirection, !isControllable);
+
+            if (isControllable)
+                owner.SelectMove(moveId);
         }
     }
 
     private void ApplyJumpState()
     {
-        if (player == null) return;
+        if (owner == null) return;
 
-        player.setJumpInfo(currentPower, currentDirection);
+        owner.setJumpInfo(currentPower, currentDirection, !isControllable);
 
         // refresh the active preview immediately
         if (PreviewManager.Instance != null)
