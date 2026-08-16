@@ -58,7 +58,7 @@ public class MoveSelectionUI : MonoBehaviour
         flipToggleObj.GetComponentInChildren<TextMeshProUGUI>().text = "Flip";
 
         Flip flip = flipToggleObj.AddComponent<Flip>();
-        flip.Initialize(isControllable);
+        flip.Initialize(owner, isControllable);
 
         columnMovement = CreateColumn("Movement", Vector2.zero);
         columnAttack   = CreateColumn("Attack", Vector2.zero);

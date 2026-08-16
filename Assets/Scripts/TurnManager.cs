@@ -88,6 +88,7 @@ public class TurnManager : MonoBehaviour
                     if(player.transform.localPosition.x <= player.TargetPosition.localPosition.x)
                         player.Flip(false);
                     else player.Flip(true);
+                    player.ResetPreviewScale();
                 }
             player.RequestDecision();
         }
@@ -160,6 +161,7 @@ public class TurnManager : MonoBehaviour
                                     if(player.transform.localPosition.x <= player.TargetPosition.localPosition.x)
                                         player.Flip(false);
                                     else player.Flip(true);
+                                    player.ResetPreviewScale();
                                 }
                                 player.RequestDecision();
                             }

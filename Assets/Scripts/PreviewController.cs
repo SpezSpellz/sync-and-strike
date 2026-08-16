@@ -58,7 +58,7 @@ public class PreviewController : MonoBehaviour
         Vector2 ownerPosition = owner.GetPosition();
         Vector2 ownerVelocity = owner.GetVelocity();
         transform.position = ownerPosition;
-        transform.localScale = owner.transform.localScale;
+        transform.localScale = owner.PreviewScale;
         previewPhysics.setPosition(ownerPosition.x, ownerPosition.y);
         previewPhysics.setVelocity(ownerVelocity.x, ownerVelocity.y);
         previewPhysics.DetectGround();

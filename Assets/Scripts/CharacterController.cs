@@ -28,6 +28,7 @@ public class CharacterController : MonoBehaviour
     public float KnockbackIndirectionPower { get; private set; } = 0;
     public float PreviewKnockbackIndirectionDirection { get; private set; } = 0f;
     public float PreviewKnockbackIndirectionPower { get; private set; } = 0f;
+    public Vector3 PreviewScale { get; private set; }
     public Transform TargetPosition { get; protected set; }
     public bool IsPreviewReady => previewController != null && characterData != null && anim != null;
 
@@ -82,6 +83,7 @@ public class CharacterController : MonoBehaviour
         physics = GetComponent<CharacterPhysics>();
         characterData = GetComponent<CharacterData>();
         physics.Initialize(characterData);
+        PreviewScale = transform.localScale;
         previewController = GetComponentInChildren<PreviewController>();
     }
 
@@ -102,7 +104,6 @@ public class CharacterController : MonoBehaviour
         }
         anim.Initialize(characterData.animations, this.onFrameEvent, physics);
         this.id = TurnManager.Instance.RegisterPlayer(this);
-        Debug.Log(name + " is grounded " + IsGrounded);
     }
 
     public void Damage(float damage)
@@ -213,6 +214,11 @@ public class CharacterController : MonoBehaviour
         SelectedMove = CONTINUE;
     }
 
+    public void ResetPreviewScale()
+    {
+        PreviewScale = transform.localScale;
+    }
+
     public bool TrySelectMove(string moveId)
     {
         if (moveId == CONTINUE)
@@ -248,10 +254,15 @@ public class CharacterController : MonoBehaviour
         TrySelectMove(moveId);
     }
 
-    public void Flip(bool flipped)
+    public void Flip(bool flipped, bool previewOnly = false)
     {
-        if(flipped != transform.localScale.x < 0)
-            transform.localScale = transform.localScale - new Vector3(transform.localScale.x * 2, 0, 0);
+        if(flipped != PreviewScale.x < 0)
+            PreviewScale -= new Vector3(PreviewScale.x * 2, 0, 0);
+        if (!previewOnly)
+        {
+            if(flipped != transform.localScale.x < 0)
+                transform.localScale -= new Vector3(transform.localScale.x * 2, 0, 0);
+        }
     }
     public HurtBox getHurtBox()
     {
@@ -285,10 +296,8 @@ public class CharacterController : MonoBehaviour
 
     public void ExecuteMove(string moveId, System.Action onComplete = null)
     {
-        if (moveId == CONTINUE)
-            return;
-        if (moveId != "idle")
-            IsBusy = true;
+        if (moveId == CONTINUE) return;
+        if (moveId != "idle") IsBusy = true;
         anim.PlayMove(moveId, () =>
         {
             IsBusy = false;

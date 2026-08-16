@@ -4,7 +4,7 @@ using UnityEngine.UI;
 public class Flip : MonoBehaviour
 {
     private Toggle toggle;
-    private PlayerController player;
+    private CharacterController owner;
     private bool isControllable;
 
     private void Awake()
@@ -16,13 +16,12 @@ public class Flip : MonoBehaviour
             Debug.LogError("Toggle is NULL on: " + gameObject.name);
             return;
         }
-
-        player = FindFirstObjectByType<PlayerController>();
         toggle.onValueChanged.AddListener(OnFlipButtonPressed);
     }
 
-    public void Initialize(bool isControllable)
+    public void Initialize(CharacterController owner, bool isControllable)
     {
+        this.owner = owner;
         this.isControllable = isControllable;
         ResetToggle();
     }
@@ -37,22 +36,16 @@ public class Flip : MonoBehaviour
 
     private void OnFlipButtonPressed(bool isOn)
     {
-        if (TurnManager.Instance == null || TurnManager.Instance.Phase != TurnPhase.Planning)
+        if (TurnManager.Instance == null || TurnManager.Instance.Phase != TurnPhase.Planning || owner == null)
         {
             ResetToggle();
             return;
         }
 
-        if (!isControllable || player == null)
-        {
-            ResetToggle();
-            return;
-        }
-
-        bool currentlyFlipped = player.transform.localScale.x < 0f;
+        bool currentlyFlipped = owner.PreviewScale.x < 0f;
         bool shouldFlipTo = !currentlyFlipped;
 
-        player.Flip(shouldFlipTo);
+        owner.Flip(shouldFlipTo, !isControllable);
         PreviewManager.Instance.RestartAllPreviews();
         UpdateVisual(isOn);
     }
