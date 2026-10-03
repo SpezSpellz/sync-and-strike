@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using Unity.VisualScripting;
@@ -34,7 +34,6 @@ public class MoveSelectionUI : MonoBehaviour
     public bool isControllable = true;
 
     private int nameBoxHeight = 20;
-    private bool firstStart = true;
     private bool previewQueued;
 
 
@@ -93,20 +92,7 @@ public class MoveSelectionUI : MonoBehaviour
             return;
         }
         previewQueued = true;
-            foreach (MoveButton moveButton in allMoveButton)
-        {
-            moveButton.gameObject.SetActive(true);
-            if (firstStart) 
-            {
-                firstStart = false;
-                return;
-            }
-            if (!moveButton.IsUsable())
-            {
-                Debug.Log(moveButton.moveName + " is unusable for " + owner.name);
-                moveButton.gameObject.SetActive(false);
-            }
-        }
+        RefreshButtons();
     }
 
     private void Update()
@@ -127,10 +113,24 @@ public class MoveSelectionUI : MonoBehaviour
     private void StartIdlePreview()
     {
         owner.ResumePreview();
+        RefreshButtons();
+    }
+
+    /// <summary>
+    /// Restores every button, then hides the ones the owner genuinely cannot use right now.
+    ///
+    /// A non-controllable panel is the enemy's read-only mirror of its own moveset, so it always
+    /// shows everything: hiding buttons there tells the player nothing useful, and because both
+    /// panels share the same bottom bar, launching the enemy used to wipe out half the controls
+    /// on screen, which read as the controls disappearing.
+    /// </summary>
+    private void RefreshButtons()
+    {
         foreach (MoveButton moveButton in allMoveButton)
         {
+            if (moveButton == null) continue;
             moveButton.gameObject.SetActive(true);
-            if (!moveButton.IsUsable())
+            if (isControllable && !moveButton.IsUsable())
                 moveButton.gameObject.SetActive(false);
         }
     }

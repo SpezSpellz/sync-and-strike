@@ -3,7 +3,6 @@ using UnityEngine;
 
 public class PhysicsManager : MonoBehaviour
 {
-    const float GRAVITY = 1.0f * 0.016f;
     public static PhysicsManager Instance { get; private set; }
     private IndexSet<PhysicsCollider> physicsObjects = new();
     private void Awake()
@@ -26,52 +25,82 @@ public class PhysicsManager : MonoBehaviour
         collider.setId(-1);
     }
 
+    public IndexSet<PhysicsCollider> GetRegisteredObjects()
+    {
+        return this.physicsObjects;
+    }
+
     public void StepFor(PhysicsCollider collider, IndexSet<PhysicsCollider> objects = null)
     {
         Vector2 velo = collider.getVelocity();
         var velo_copy = velo;
+        // Captured so hurt states can still see how fast the fighter was travelling when it hit
+        // the wall; the collision response below zeroes that axis before they get a chance to
+        // read it, which would make the wall rebound impossible.
+        var preBlockVelocity = velo_copy;
         var beg = collider.getPosition();
         int tries = 0;
+        // touching_wall and the wall rebound are about the stage wall specifically, never about
+        // being blocked by the floor or by the other fighter.
+        bool blockedByStageWall = false;
         while(tries < 10 && velo.sqrMagnitude > 0.00001)
         {
-            var (tar, vert) = this.getClampedPosition(collider, velo, objects);
-            beg += tar;
-            var collided = (velo - tar).sqrMagnitude > 0.00001;
-            velo -= tar;
+            var res = this.getClampedPosition(collider, velo, objects);
+            beg += res.travel;
+            var collided = (velo - res.travel).sqrMagnitude > 0.00001;
+            velo -= res.travel;
             if (collided)
             {
-                if (vert)
+                // Zero the blocked axis instead of bouncing the fighter off the wall,
+                // so knockback into a corner pins the character against it.
+                if (res.vertical)
                 {
-                    velo_copy.x *= -0.5f;
-                    velo.x *= -0.5f;
+                    velo_copy.x *= PhysicsConstants.WALL_RESTITUTION;
+                    velo.x *= PhysicsConstants.WALL_RESTITUTION;
                 }
                 else
                 {
-                    velo_copy.y *= -0.5f;
-                    velo.y *= -0.5f;
+                    velo_copy.y *= PhysicsConstants.WALL_RESTITUTION;
+                    velo.y *= PhysicsConstants.WALL_RESTITUTION;
                 }
+                blockedByStageWall |= res.blockerIsStageWall;
             }
             collider.setPosition(beg.x, beg.y);
             ++tries;
         }
         velo = velo_copy;
-        if (collider.hasGravity())
-        {
-            velo.y -= GRAVITY;
-        }
         collider.setVelocity(velo.x, velo.y);
+
+        // HurtGrounded checks touching_wall to suppress further horizontal push, and
+        // that flag is a stage-boundary test only, so the floor and the opponent are excluded.
+        if (collider is CharacterPhysics characterPhysics)
+        {
+            characterPhysics.SetWallContact(blockedByStageWall,
+                                            blockedByStageWall ? preBlockVelocity : Vector2.zero);
+        }
     }
 
-    private (Vector2, bool) getClampedPosition(PhysicsCollider collider, Vector2 velo, IndexSet<PhysicsCollider> objects)
+    /// <summary>Outcome of one collision-resolution pass.</summary>
+    private struct ClampResult
     {
-        bool vert = false;
+        public Vector2 travel;      // how far this fighter may actually move this pass
+        public bool vertical;       // the blocking face was vertical (a left/right wall)
+        public bool blockerIsStageWall;
+    }
+
+    private ClampResult getClampedPosition(PhysicsCollider collider, Vector2 velo, IndexSet<PhysicsCollider> objects)
+    {
+        var result = new ClampResult { travel = Vector2.zero };
         AABB aabb = collider.getBoundingBox();
         if (aabb == null || velo.sqrMagnitude == 0)
-            return (Vector2.zero, false);
+            return result;
+
         float dist = float.PositiveInfinity;
         foreach (PhysicsCollider otherCollider in objects == null ? this.physicsObjects.getList() : objects.getList())
         {
             if (collider == otherCollider)
+                continue;
+            if (!collider.CollidesWith(otherCollider))
                 continue;
             AABB aabb2 = otherCollider.getBoundingBox();
             if (aabb2 == null)
@@ -80,9 +109,17 @@ public class PhysicsManager : MonoBehaviour
             if (res.Distance < dist)
             {
                 dist = res.Distance;
-                vert = res.HitVertical;
+                result.vertical = res.HitVertical;
+                // A vertical static collider is the stage wall. A horizontal one is the floor or
+                // a platform, which touching_wall never reports.
+                bool stageWall = otherCollider is StaticCollider
+                    && result.vertical
+                    && aabb2.getWidth() < aabb2.getHeight();
+                result.blockerIsStageWall = stageWall;
             }
         }
-        return (velo.normalized * Mathf.Min(velo.magnitude, Mathf.Max(0, dist - 0.001f)), vert);
+
+        result.travel = velo.normalized * Mathf.Min(velo.magnitude, Mathf.Max(0, dist - PhysicsConstants.COLLIDER_SKIN));
+        return result;
     }
 }

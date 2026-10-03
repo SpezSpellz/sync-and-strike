@@ -19,6 +19,9 @@ public class PreviewHitboxManager : MonoBehaviour
             foreach (var hurtbox in hurtboxes)
             {
                 if (hitbox.attacker == hurtbox.owner) continue;
+                if (hitbox.attacker != null && hurtbox.owner != null
+                    && !CombatTeamUtility.AreEnemies(hitbox.attacker.Team, hurtbox.owner.Team))
+                    continue;
                 if (hitbox.intersectWith(hurtbox))
                     hitbox.OnHit(hurtbox.owner);
             }

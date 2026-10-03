@@ -22,6 +22,11 @@ public class PreviewPhysicsManager : MonoBehaviour
         physics.setId(-1);
     }
 
+    public IndexSet<PhysicsCollider> GetRegisteredObjects()
+    {
+        return this.objects;
+    }
+
     public void StepFor(PhysicsCollider physics)
     {
         PhysicsManager.Instance.StepFor(physics, objects); // reuse existing physics step

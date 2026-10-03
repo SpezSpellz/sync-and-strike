@@ -36,3 +36,4 @@ MonoBehaviour:
   continuousImpulse: 0
   impulse: {x: 0, y: 0}
   knockback: 0
+  jumpSpeed: 8.5

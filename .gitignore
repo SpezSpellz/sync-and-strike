@@ -12,6 +12,10 @@
 /[Uu]ser[Ss]ettings/
 *.log
 
+# Reference material for the combat model, kept locally only. Not part of the game and not
+# licensed for redistribution, so it must never be committed.
+/YOMI/
+
 # By default unity supports Blender asset imports, *.blend1 blender files do not need to be commited to version control.
 *.blend1
 *.blend1.meta

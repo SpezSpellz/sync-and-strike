@@ -1,4 +1,3 @@
-
 using UnityEngine;
 
 public abstract class PhysicsCollider : MonoBehaviour
@@ -34,6 +33,15 @@ public abstract class PhysicsCollider : MonoBehaviour
     public abstract Vector2 getPosition();
 
     public abstract void setPosition(float x, float y);
+
+    /// <summary>
+    /// Whether this collider should physically push <paramref name="other"/> around.
+    /// Allies pass through each other (the companion must never shove the player).
+    /// </summary>
+    public virtual bool CollidesWith(PhysicsCollider other)
+    {
+        return true;
+    }
 
     public abstract void Step();
 }

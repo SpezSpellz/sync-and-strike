@@ -42,21 +42,29 @@ public class Flip : MonoBehaviour
             return;
         }
 
-        bool currentlyFlipped = owner.PreviewScale.x < 0f;
-        bool shouldFlipTo = !currentlyFlipped;
+        // The toggle now mirrors the fighter's real facing, so its value IS the target facing.
+        // Previously this derived the direction from PreviewScale and inverted the toggle's
+        // meaning, so clicking "on" could flip the fighter the same way it was already facing.
+        if (isControllable) owner.FlipAndRememberFacing(isOn);
+        else owner.Flip(isOn, true);   // mirror panel: preview ghost only
 
-        owner.Flip(shouldFlipTo, !isControllable);
         PreviewManager.Instance.RestartAllPreviews();
         UpdateVisual(isOn);
     }
 
+    /// <summary>
+    /// Syncs the toggle to the fighter's actual facing. This used to force the toggle off every
+    /// time, which only read correctly while the opponent happened to be on the right; once the
+    /// fighters crossed over the toggle showed the opposite of reality.
+    /// </summary>
     private void ResetToggle()
     {
-        if (toggle == null)
+        if (toggle == null || owner == null)
             return;
 
-        toggle.SetIsOnWithoutNotify(false);
-        UpdateVisual(false);
+        bool flipped = owner.IsFlipped;
+        toggle.SetIsOnWithoutNotify(flipped);
+        UpdateVisual(flipped);
     }
 
     private void UpdateVisual(bool isOn)
