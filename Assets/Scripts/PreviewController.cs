@@ -23,9 +23,9 @@ public class PreviewController : MonoBehaviour
     public CharacterController Owner => owner;
     [HideInInspector] public Arena Arena;
 
-    private PreviewPhysicsManager PreviewPhysics => Arena != null ? Arena.previewPhysicsManager : PreviewPhysicsManager.Instance;
-    private PreviewHitboxManager PreviewHitbox => Arena != null ? Arena.previewHitboxManager : PreviewHitboxManager.Instance;
-    private PreviewManager PreviewCtl => Arena != null ? Arena.previewManager : PreviewManager.Instance;
+    private PreviewPhysicsManager PreviewPhysics => Arena != null ? Arena.PreviewPhysicsManager : PreviewPhysicsManager.Instance;
+    private PreviewHitboxManager PreviewHitbox => Arena != null ? Arena.PreviewHitboxManager : PreviewHitboxManager.Instance;
+    private PreviewManager PreviewCtl => Arena != null ? Arena.PreviewManager : PreviewManager.Instance;
 
     private const float FRAME_TIME = 1f / 60f; // 60 fps
 

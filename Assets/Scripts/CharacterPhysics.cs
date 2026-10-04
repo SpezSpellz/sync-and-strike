@@ -13,11 +13,43 @@ public class CharacterPhysics : PhysicsCollider
     public bool IsGrounded { get; private set; } = true;
 
     private Arena _arena;
-    private PhysicsManager PhysManager() => _arena != null ? _arena.physicsManager : PhysicsManager.Instance;
-    private PreviewPhysicsManager PPManager() => _arena != null ? _arena.previewPhysicsManager : PreviewPhysicsManager.Instance;
+
+    /// <summary>
+    /// The arena this collider belongs to.
+    ///
+    /// Resolved lazily rather than in Initialize/Start, because CharacterController.Update() runs
+    /// BEFORE Start() on a freshly created fighter. Caching the arena in Start left it null here, so
+    /// this fell back to PhysicsManager.Instance, which in a multi-arena training scene is some other
+    /// arena's manager. The symptoms were a NullReferenceException on the very first Update and, worse,
+    /// the fighter registering itself with the wrong TurnManager so its arena never saw it.
+    /// </summary>
+    private Arena ArenaFor(Component c)
+    {
+        if (_arena == null) _arena = GetComponentInParent<Arena>();
+        return _arena;
+    }
+
+    private PhysicsManager PhysManager()
+    {
+        var arena = ArenaFor(this);
+        return arena != null ? arena.PhysicsManager : PhysicsManager.Instance;
+    }
+
+    private PreviewPhysicsManager PPManager()
+    {
+        var arena = ArenaFor(this);
+        return arena != null ? arena.PreviewPhysicsManager : PreviewPhysicsManager.Instance;
+    }
+
     private IndexSet<PhysicsCollider> RegisteredObjects()
     {
-        return isPreview ? PPManager().GetRegisteredObjects() : PhysManager().GetRegisteredObjects();
+        if (isPreview)
+        {
+            var pm = PPManager();
+            return pm != null ? pm.GetRegisteredObjects() : new IndexSet<PhysicsCollider>();
+        }
+        var phys = PhysManager();
+        return phys != null ? phys.GetRegisteredObjects() : new IndexSet<PhysicsCollider>();
     }
     /// <summary>Number of simulation frames the character has been standing on the ground.</summary>
     public int GroundedFrames { get; private set; } = 0;
@@ -35,12 +67,12 @@ public class CharacterPhysics : PhysicsCollider
     {
         this.characterData = characterData;
         this.isPreview = isPreview;
-        _arena = GetComponentInParent<Arena>();
+        ArenaFor(this);
     }
 
     public override void Start()
     {
-        _arena = GetComponentInParent<Arena>();
+        ArenaFor(this);
         base.Start();
     }
     public void ApplyImpulse(Vector2 impulse)
@@ -77,6 +109,11 @@ public class CharacterPhysics : PhysicsCollider
 
     public override AABB getBoundingBox()
     {
+        // characterData is null until Initialize() runs, which happens from CharacterController.Start().
+        // Unity runs Update BEFORE Start on a newly created object, so a physics body can be stepped in
+        // that first frame. Every caller already null-checks the returned AABB, so bailing out here is
+        // safe and turns a hard crash into "no collider this frame".
+        if (characterData == null) return null;
         return new AABB(
             transform.position.x - this.characterData.width / 2,
             transform.position.y - this.characterData.height / 2,

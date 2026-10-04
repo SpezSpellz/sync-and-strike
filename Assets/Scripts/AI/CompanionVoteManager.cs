@@ -185,7 +185,7 @@ public class CompanionVoteManager : MonoBehaviour
         try { VoteResolved?.Invoke(isGood, timedOut); } catch (Exception e) { Debug.LogException(e); }
 
         // The vote never blocks the game: resume planning immediately after it resolves.
-        var tm = Arena != null ? Arena.turnManager : TurnManager.Instance;
+        var tm = Arena != null ? Arena.TurnManager : TurnManager.Instance;
         tm.ResumeAfterVote();
     }
 

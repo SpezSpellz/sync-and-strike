@@ -51,8 +51,8 @@ public class PreviewManager : MonoBehaviour
         }
 
         // after stepping, resolve preview hitboxes
-        var hbm = Arena != null ? Arena.previewHitboxManager : PreviewHitboxManager.Instance;
-        hbm.Step();
+        var hbm = Arena != null ? Arena.PreviewHitboxManager : PreviewHitboxManager.Instance;
+        hbm?.Step();
     }
 
     public PreviewController GetPreviewByOwner(CharacterController owner)

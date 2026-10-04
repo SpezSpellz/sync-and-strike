@@ -21,6 +21,14 @@ public class CharacterController : MonoBehaviour
     public CharacterData Data => characterData;
     public FighterStateMachine States => stateMachine;
     public AnimationData[] animations => characterData.animations;
+
+    /// <summary>
+    /// Running combat counters for this fighter. Written from HitReaction when a hit connects and
+    /// from ExecuteMove when an attack is committed. Read by the training runner to divide the shared
+    /// 2v1 win bonus by damage contribution, and by the telemetry CSV for the whiff rate.
+    /// A plain field rather than a property so HitReaction can mutate it in place without a setter.
+    /// </summary>
+    public readonly CombatStats CombatStats = new CombatStats();
     public CombatState State => stateMachine != null ? stateMachine.CurrentId : CombatState.Idle;
 
     public bool IsGrounded => physics != null && physics.IsGrounded;
@@ -280,9 +288,25 @@ public class CharacterController : MonoBehaviour
     }
 
     private Arena _arena;
-    private TurnManager Turn => _arena != null ? _arena.turnManager : TurnManager.Instance;
-    private HitboxManager Hitbox => _arena != null ? _arena.hitboxManager : HitboxManager.Instance;
-    private PreviewManager PreviewCtl => _arena != null ? _arena.previewManager : PreviewManager.Instance;
+
+    /// <summary>
+    /// The arena this fighter belongs to, resolved lazily from the ancestor chain. Null in a
+    /// single-arena scene, in which case every manager falls back to its static Instance.
+    ///
+    /// Resolved lazily on every use rather than cached in Awake: Unity runs Update() before Start()
+    /// on a newly created fighter, so anything that asks during the first frame would otherwise get
+    /// null and silently fall through to another arena's static manager.
+    /// </summary>
+    protected Arena ArenaFor(Component c)
+    {
+        if (c == null) return null;
+        if (_arena == null) _arena = c.GetComponentInParent<Arena>();
+        return _arena;
+    }
+
+    private TurnManager Turn => ArenaFor(this) != null ? ArenaFor(this).TurnManager : TurnManager.Instance;
+    private HitboxManager Hitbox => ArenaFor(this) != null ? ArenaFor(this).HitboxManager : HitboxManager.Instance;
+    private PreviewManager PreviewCtl => ArenaFor(this) != null ? ArenaFor(this).PreviewManager : PreviewManager.Instance;
 
     private void Update()
     {
@@ -438,6 +462,14 @@ public class CharacterController : MonoBehaviour
     private void SpawnHitbox(HitboxData data)
     {
         if (data.damage == 0 && data.knockback == Vector2.zero) return;
+
+        // Count the ATTACK here, where the hitbox is actually put into the world, rather than when
+        // the move was committed. A hit only ever connects through the callback below, so this is
+        // the exact denominator a whiff rate needs: every swing that was thrown, whether or not it
+        // reached anybody. Counting at commit time instead would fold in moves that never got as far
+        // as spawning a hitbox, which would understate the whiff rate.
+        CombatStats.RecordAttack();
+
         float facing = FacingVector.x;
         float cx = transform.position.x + facing * data.offsetX;
         float cy = transform.position.y + data.offsetY;

@@ -18,9 +18,9 @@ public abstract class AIController : CharacterController
 
     protected FighterAI ruleBrain;
     private FighterPolicy brain;
-    private Arena _arena;
-    private Arena Arena => _arena != null ? _arena : (_arena = GetComponentInParent<Arena>());
-    private TurnManager TurnMgr => Arena != null ? Arena.turnManager : TurnManager.Instance;
+    // Arena and its _arena cache are declared once on CharacterController. Redeclaring them here
+    // would shadow the base field and make Unity serialize the same name twice.
+    private TurnManager TurnMgr => ArenaFor(this) != null ? ArenaFor(this).TurnManager : TurnManager.Instance;
     private FighterAI.Personality runtimePersonality;
 
     /// <summary>The decision made for the current turn. Read by the voting UI and the trainer.</summary>
@@ -45,12 +45,28 @@ public abstract class AIController : CharacterController
 
     /// <summary>
     /// Choose the active brain. Defaults to the rule-based brain, which is what the frozen enemy
-    /// uses. The companion overrides this to return its on-device PPO policy.
+    /// ships as. Subclasses override to return a learned policy (see <see cref="PolicyLearner"/>).
     /// </summary>
     protected virtual FighterPolicy SelectBrain()
     {
         return ruleBrain;
     }
+
+    /// <summary>
+    /// Public accessor so a policy learner can rebuild observations for this fighter without
+    /// knowing the concrete controller type.
+    /// </summary>
+    public CharacterController TargetForTraining => ResolveTarget();
+
+    /// <summary>Public accessor for the friendly fighter, used only for companion spacing.</summary>
+    public CharacterController AllyForTraining => ResolveAlly();
+
+    /// <summary>
+    /// The PPO policy currently driving this fighter, or null when it is using the rule-based brain
+    /// (before initialization, or for a fighter that opted out of learning). Read by the telemetry
+    /// writer so it does not need to know how the session/policy indirection is arranged.
+    /// </summary>
+    public NeuralPolicy PolicyForTelemetry => PolicyLearner.PolicyFor(this);
 
     private static FighterAI.Personality CopyPersonality(FighterAI.Personality from)
     {

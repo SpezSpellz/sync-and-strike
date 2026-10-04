@@ -1,8 +1,24 @@
 using UnityEngine;
 
-/// <summary>Standing still: normal friction and gravity.</summary>
+/// <summary>
+/// Standing still: normal friction and gravity.
+///
+/// This also reports action completion once the idle animation's minimum has played out. Idle looks
+/// like a state with nothing to do, but it is reachable MID-TURN: CharacterController.LeaveHurtState
+/// drops an interrupted fighter straight into IdleState, and until now nothing in Idle ever
+/// reported completion. The turn then had no way to end except TurnManager's maxTurnFrames
+/// backstop, so every interrupted turn silently burned all 180 frames. That was the single largest
+/// cause of the training run crawling, and it flooded the log with "Turn hit the 180-frame cap".
+///
+/// Reporting is safe to do redundantly: CharacterController.ReportActionComplete nulls
+/// onMoveComplete after the first call, so the usual path (CompleteMove changes to Idle and then
+/// reports) cannot double-count the turn's completion callback here.
+/// </summary>
 public class IdleState : FighterState
 {
+    private int reportAfterFrames;
+    private bool reported;
+
     public IdleState(CharacterController owner) : base(owner) { }
 
     public override CombatState Id => CombatState.Idle;
@@ -10,6 +26,13 @@ public class IdleState : FighterState
     public override void Enter()
     {
         ResetTick();
+        reported = false;
+        // Reuse the authored idle timing where it is available. Falls back to a short delay so a
+        // fighter with no idle move still reports rather than stalling the turn. HasMove is used
+        // rather than GetMove because GetMove logs a warning, which would spam once per state entry.
+        var data = owner.Data;
+        var idle = (data != null && data.HasMove("idle")) ? data.GetMove("idle") : null;
+        reportAfterFrames = Mathf.Max(1, idle != null ? idle.firstActionable : 2);
         owner.PlayIdleAnimation();
     }
 
@@ -18,6 +41,12 @@ public class IdleState : FighterState
         base.Step();
         physics.ApplyForces(PhysicsConstants.GROUND_FRICTION_RATIO, PhysicsConstants.GRAVITY, physics.IsGrounded);
         owner.Anim.StepFrame();
+
+        if (!reported && Tick >= reportAfterFrames)
+        {
+            reported = true;
+            owner.ReportActionComplete();
+        }
     }
 }
 

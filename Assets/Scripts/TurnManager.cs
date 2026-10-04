@@ -8,9 +8,9 @@ public class TurnManager : MonoBehaviour
     public TurnPhase Phase { get; private set; }
     [HideInInspector] public Arena Arena;
 
-    private HitboxManager Hitbox => Arena != null ? Arena.hitboxManager : HitboxManager.Instance;
-    private UIManager UI => Arena != null ? Arena.uiManager : UIManager.Instance;
-    private CompanionVoteManager VoteManager => Arena != null ? Arena.companionVoteManager : CompanionVoteManager.Instance;
+    private HitboxManager Hitbox => Arena != null ? Arena.HitboxManager : HitboxManager.Instance;
+    private UIManager UI => Arena != null ? Arena.UIManager : UIManager.Instance;
+    private CompanionVoteManager VoteManager => Arena != null ? Arena.CompanionVoteManager : CompanionVoteManager.Instance;
 
     /// <summary>
     /// Fired at the end of every simulated turn, after fighters are force-finished but BEFORE the
@@ -24,6 +24,20 @@ public class TurnManager : MonoBehaviour
 
     [SerializeField]
     private bool fastForward;
+
+    /// <summary>
+    /// Training-mode simulation cap per Unity frame.
+    ///
+    /// TurnManager's inner loop is bounded by this rather than running to completion, so one slow arena
+    /// cannot consume an entire frame and stall every other arena sharing the process. The bound is what
+    /// makes N arenas in one process scale: total throughput is (arenas x this) simulation frames per
+    /// rendered frame, capped by however long a frame actually takes.
+    ///
+    /// Set from <see cref="TrainingMode.maxSimFramesPerUnityFrame"/> so a throughput run can be pushed
+    /// harder without touching this component.
+    /// </summary>
+    private int MaxSimFramesThisFrame =>
+        TrainingMode.enabled ? TrainingMode.maxSimFramesPerUnityFrame : 100;
 
     [Tooltip("Hard cap on how many frames a single turn may simulate before it is force-resolved.")]
     private int maxTurnFrames = 180;
@@ -89,6 +103,22 @@ public class TurnManager : MonoBehaviour
         return null;
     }
 
+    /// <summary>
+    /// True while <see cref="ResolveTurn"/> is running, i.e. while a <see cref="TurnResolved"/>
+    /// handler is on the stack.
+    ///
+    /// This flag exists because of a re-entrancy bug. The training runner resets the match from
+    /// inside its TurnResolved handler, and ResetState used to call BeginPlanning() directly. Control
+    /// then returned to ResolveTurn, whose tail ALSO calls BeginPlanning() - so planning ran twice
+    /// per turn. RequestDecision was therefore called twice per fighter, the PPO transition was
+    /// recorded twice and then overwritten (orphaning the first sample), and ExecuteMove ran twice,
+    /// restarting every animation and resetting actionReported.
+    ///
+    /// Now a reset arriving mid-resolve only records intent, and ResolveTurn performs the single
+    /// BeginPlanning at its tail.
+    /// </summary>
+    private bool resolvingTurn;
+
     public void ResetState()
     {
         foreach (var player_turn_data in players.getList())
@@ -100,6 +130,11 @@ public class TurnManager : MonoBehaviour
         {
             player_turn_data.player.ResetDecisionMetrics();
         }
+
+        // The SaveData load above has already happened; only the new round is deferred, and
+        // ResolveTurn reaches exactly one BeginPlanning on its way out.
+        if (resolvingTurn) return;
+
         BeginPlanning();
     }
 
@@ -209,11 +244,21 @@ public class TurnManager : MonoBehaviour
                 }
             case TurnPhase.Simulating:
                 {
-                    int count = 0;
+                    int budget = MaxSimFramesThisFrame;
+                    // The accumulator is drained in fixed simulation steps rather than one step per unit
+                    // of leftover real time. In training secondsPerFrame is 0.001s, so a 16ms Unity frame
+                    // asks for ~16 sim frames; capping at `budget` and DISCARDING the remainder is
+                    // deliberate, because carrying the surplus forward would make the backlog grow without
+                    // bound under load and every arena would fall progressively further behind real time.
+                    // Dropping it means a frame that overruns its budget simply simulates less, which is
+                    // the correct trade for a throughput run.
                     ticksAwaiting += Time.deltaTime;
-                    while (ticksAwaiting > 0 || (fastForward && ++count < 100))
+                    int stepsWanted = Mathf.CeilToInt(ticksAwaiting / LOCAL_SECONDS_PER_FRAME);
+                    ticksAwaiting = 0f;
+                    int steps = Mathf.Min(stepsWanted, budget);
+
+                    while (steps-- > 0)
                     {
-                        ticksAwaiting -= LOCAL_SECONDS_PER_FRAME;
                         int totalPlayers = players.getList().Count;
                         if (completedCount >= totalPlayers || framesThisTurn >= maxTurnFrames)
                         {
@@ -250,10 +295,24 @@ public class TurnManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Simulated frames the most recently resolved turn consumed, versus <see cref="maxTurnFrames"/>.
+    ///
+    /// Published because "the turn took the full frame cap" and "the turn finished normally" look
+    /// identical in the console unless you know which happened. Training telemetry records it, and it
+    /// is how a missing completion path in a fighter state gets spotted: the number pins at the cap.
+    /// </summary>
+    public int FramesLastTurn { get; private set; }
+
     private void ResolveTurn()
     {
         if (Phase != TurnPhase.Simulating) return;
         Phase = TurnPhase.Resolved;
+        FramesLastTurn = framesThisTurn;
+
+        // Everything from here to the single BeginPlanning at the tail runs with this set, so a
+        // ResetState() from a TurnResolved handler cannot start a second planning phase.
+        resolvingTurn = true;
 
         // Anyone still busy (e.g. frozen in hitstun) is force-cleared so the next turn can start.
         foreach (var player_turn_data in players.getList())
@@ -264,6 +323,11 @@ public class TurnManager : MonoBehaviour
         // Reward hook for the companion's on-device learner. Fired before the vote prompt pauses
         // the loop so the learner sees the resolved turn immediately.
         try { TurnResolved?.Invoke(); } catch (System.Exception e) { Debug.LogException(e); }
+
+        // The reset itself already ran - ResetState loads every fighter's SaveData synchronously
+        // before returning. Only the BeginPlanning was deferred, and exactly one of the two exits
+        // below reaches it, so there is nothing left to carry across.
+        resolvingTurn = false;
 
         var companion = FindCompanion();
         if (companion != null && !companion.IsDead())
@@ -276,7 +340,7 @@ public class TurnManager : MonoBehaviour
                 Phase = TurnPhase.AwaitingVote;
                 voteAwaitStartedAt = Time.time;
                 companion.PrepareVoting();
-                return;
+                return;   // ResumeAfterVote / UpdateVoteTimeout calls BeginPlanning
             }
         }
 

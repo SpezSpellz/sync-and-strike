@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -18,6 +19,14 @@ public class CompanionController : AIController
 
     [Tooltip("Seconds the vote prompt stays on screen before auto-resolving as 'good'.")]
     private float voteTimeout = 12f;
+
+    /// <summary>
+    /// Point this fighter at a specific ally. The training arenas build their fighters from code, so
+    /// the serialized <see cref="playerAlly"/> reference can never be authored for them and would
+    /// otherwise stay null. Without an ally the FighterAI spacing rules are inert and the allyX/allyY
+    /// observation features are always zero, so the companion could not learn to coordinate.
+    /// </summary>
+    public void SetAllyForTraining(CharacterController ally) => playerAlly = ally;
 
     protected override void ConfigurePersonality(FighterAI.Personality profile)
     {
@@ -66,10 +75,17 @@ public class CompanionController : AIController
         return best;
     }
 
-    private CharacterController[] FindAllPlayers()
+    /// <summary>
+    /// Fighters in the same arena as this one.
+    ///
+    /// Scoped deliberately. This used to be a scene-wide FindObjectsByType, which is harmless with a
+    /// single arena but catastrophic during a parallel training run: with N arenas alive every
+    /// companion would happily target a fighter belonging to a different arena, so the matches
+    /// would be meaningless. Mirrors EnemyController.FindClosestEnemy.
+    /// </summary>
+    private List<CharacterController> FindAllPlayers()
     {
-        var all = FindObjectsByType<CharacterController>(FindObjectsSortMode.None);
-        return all;
+        return Arena.FightersNear(this);
     }
 
     /// <summary>Public accessor so the vote manager can read the companion's current target.</summary>
@@ -79,26 +95,32 @@ public class CompanionController : AIController
     }
 
     /// <summary>
-    /// The companion plays on an on-device PPO policy (see <see cref="CompanionLearner"/>) that keeps
+    /// The companion plays on an on-device PPO policy (see <see cref="PolicyLearner"/>) that keeps
 /// training on the player's own machine from their votes and match outcomes. The rule-based brain is
     /// still used during the warm start and to supply the jump/DI geometry each turn.
     /// </summary>
+    /// <summary>
+    /// The ally this fighter shares one network with. In the shipped game only the companion plays a
+    /// policy, so the player is left null and the companion gets its own. In a 2v1 training arena
+    /// both allies are policy-driven and must share one network, so the builder points the second
+    /// ally at the first.
+    /// </summary>
+    private AIController brainSharer;
+
+    /// <summary>Join <paramref name="other"/>'s network instead of creating a separate one.</summary>
+    public void SharePolicyWith(AIController other) => brainSharer = other;
+
     protected override FighterPolicy SelectBrain()
     {
-        return CompanionLearner.CreatePolicy(this, ruleBrain);
+        return PolicyLearner.CreatePolicy(this, ruleBrain, PolicyLearner.RoleCompanion,
+                                          learnOnline: true, shareWith: brainSharer);
     }
-
-    /// <summary>Public accessor for the on-device learner so it can build the next observation.</summary>
-    public CharacterController ResolveTargetForTraining() => ResolveTarget();
-
-    /// <summary>Public accessor for the on-device learner so it can build the next observation.</summary>
-    public CharacterController ResolveAllyForTraining() => ResolveAlly();
 
     public override void RequestDecision()
     {
         base.RequestDecision();
         // Capture the committed transition and fold in any pending PPO update.
-        CompanionLearner.NotifyDecision(this);
+        PolicyLearner.NotifyDecision(this);
     }
 
     /// <summary>Called by TurnManager when the turn starts so the companion can vote-prompt later.</summary>

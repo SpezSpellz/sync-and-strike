@@ -196,8 +196,55 @@ public class NeuralNetwork
         }
     }
 
-    public void ApplyGradients(float lr)
+    /// <summary>
+    /// Apply one gradient step, with two safety nets that this trainer had been missing.
+    ///
+    /// NaN is unrecoverable here: once any weight becomes NaN, Forward returns NaN logits, the
+    /// sampled distribution is all-NaN, every subsequent gradient is NaN, and the policy is dead for
+    /// the rest of the run while still LOOKING alive (it keeps sampling, it just always picks the
+    /// same action). That is exactly the failure observed in training - entropy 0, top-1 share 1.0,
+    /// and advantage magnitude NaN - and it is unrecoverable without reloading weights from disk.
+    ///
+    /// The two nets:
+    ///   * Global-norm gradient clipping, so one pathological minibatch cannot produce a step large
+    ///     enough to overflow a float or blow the network apart.
+    ///   * A non-finite check on the incoming gradients, which skips the step entirely. Skipping is
+    ///     strictly better than applying: a NaN step poisons the weights permanently, whereas a
+    ///     skipped step just loses one update.
+    /// </summary>
+    public void ApplyGradients(float lr, float maxGradNorm = 0f)
     {
+        if (!GradientsAreFinite())
+        {
+            NonFiniteGradientSteps++;
+            // Clear the accumulator so the bad batch cannot contaminate the next one either.
+            ClearGradients();
+            return;
+        }
+
+        if (maxGradNorm > 0f)
+        {
+            float norm = 0f;
+            for (int i = 0; i < gw1.Length; i++) norm += gw1[i] * gw1[i];
+            for (int i = 0; i < gw2.Length; i++) norm += gw2[i] * gw2[i];
+            for (int i = 0; i < gwp.Length; i++) norm += gwp[i] * gwp[i];
+            for (int i = 0; i < gwv.Length; i++) norm += gwv[i] * gwv[i];
+            norm = Mathf.Sqrt(norm);
+            if (norm > maxGradNorm)
+            {
+                float scale = maxGradNorm / (norm + 1e-6f);
+                for (int i = 0; i < gw1.Length; i++) gw1[i] *= scale;
+                for (int i = 0; i < gb1.Length; i++) gb1[i] *= scale;
+                for (int i = 0; i < gw2.Length; i++) gw2[i] *= scale;
+                for (int i = 0; i < gb2.Length; i++) gb2[i] *= scale;
+                for (int i = 0; i < gwp.Length; i++) gwp[i] *= scale;
+                for (int i = 0; i < gbp.Length; i++) gbp[i] *= scale;
+                for (int i = 0; i < gwv.Length; i++) gwv[i] *= scale;
+                gbv[0] *= scale;
+                ClippedGradSteps++;
+            }
+        }
+
         for (int i = 0; i < w1.Length; i++) w1[i] -= lr * gw1[i];
         for (int i = 0; i < b1.Length; i++) b1[i] -= lr * gb1[i];
         for (int i = 0; i < w2.Length; i++) w2[i] -= lr * gw2[i];
@@ -206,7 +253,69 @@ public class NeuralNetwork
         for (int i = 0; i < bp.Length; i++) bp[i] -= lr * gbp[i];
         for (int i = 0; i < wv.Length; i++) wv[i] -= lr * gwv[i];
         bv[0] -= lr * gbv[0];
+        TrackMaxWeight();
     }
+
+    /// <summary>True when every accumulated gradient is a finite number.</summary>
+    private bool GradientsAreFinite()
+    {
+        for (int i = 0; i < gw1.Length; i++) if (!IsFinite(gw1[i])) return false;
+        for (int i = 0; i < gb1.Length; i++) if (!IsFinite(gb1[i])) return false;
+        for (int i = 0; i < gw2.Length; i++) if (!IsFinite(gw2[i])) return false;
+        for (int i = 0; i < gb2.Length; i++) if (!IsFinite(gb2[i])) return false;
+        for (int i = 0; i < gwp.Length; i++) if (!IsFinite(gwp[i])) return false;
+        for (int i = 0; i < gbp.Length; i++) if (!IsFinite(gbp[i])) return false;
+        for (int i = 0; i < gwv.Length; i++) if (!IsFinite(gwv[i])) return false;
+        return IsFinite(gbv[0]);
+    }
+
+    private static bool IsFinite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
+
+    /// <summary>
+    /// True when every weight is finite.
+    ///
+    /// A poisoned network is otherwise indistinguishable from a working one at runtime, so this is
+    /// checked by the learner and reported loudly. Recovery is to reload the last saved weights.
+    /// </summary>
+    public bool WeightsAreFinite()
+    {
+        for (int i = 0; i < w1.Length; i++) if (!IsFinite(w1[i])) return false;
+        for (int i = 0; i < w2.Length; i++) if (!IsFinite(w2[i])) return false;
+        for (int i = 0; i < wp.Length; i++) if (!IsFinite(wp[i])) return false;
+        for (int i = 0; i < wv.Length; i++) if (!IsFinite(wv[i])) return false;
+        return IsFinite(bv[0]) && IsFinite(bp[0]);
+    }
+
+    /// <summary>How many gradient steps were skipped because the gradients were not finite.</summary>
+    public int NonFiniteGradientSteps { get; private set; }
+
+    /// <summary>
+    /// Largest magnitude seen in any weight or bias at the last update.
+    ///
+    /// A leading indicator of the NaN failure rather than a report of it. Once weights reach the
+    /// hundreds the logits are enormous, the softmax saturates to one-hot, and a single update can
+    /// overflow - which is exactly the sequence that killed the first training run. Watching this climb
+    /// towards ~100 warns that a run is about to die while it can still be fixed.
+    /// </summary>
+    public float MaxAbsWeight { get; private set; }
+
+    /// <summary>Recompute <see cref="MaxAbsWeight"/>. Cheap; called once per update.</summary>
+    private void TrackMaxWeight()
+    {
+        float m = 0f;
+        for (int i = 0; i < w1.Length; i++) { float a = Mathf.Abs(w1[i]); if (a > m) m = a; }
+        for (int i = 0; i < b1.Length; i++) { float a = Mathf.Abs(b1[i]); if (a > m) m = a; }
+        for (int i = 0; i < w2.Length; i++) { float a = Mathf.Abs(w2[i]); if (a > m) m = a; }
+        for (int i = 0; i < b2.Length; i++) { float a = Mathf.Abs(b2[i]); if (a > m) m = a; }
+        for (int i = 0; i < wp.Length; i++) { float a = Mathf.Abs(wp[i]); if (a > m) m = a; }
+        for (int i = 0; i < bp.Length; i++) { float a = Mathf.Abs(bp[i]); if (a > m) m = a; }
+        for (int i = 0; i < wv.Length; i++) { float a = Mathf.Abs(wv[i]); if (a > m) m = a; }
+        m = Mathf.Max(m, Mathf.Abs(bv[0]));
+        MaxAbsWeight = m;
+    }
+
+    /// <summary>How many gradient steps were rescaled by the global-norm clip.</summary>
+    public int ClippedGradSteps { get; private set; }
 
     public Weights Export()
     {

@@ -34,7 +34,7 @@ public class PreviewPhysicsManager : MonoBehaviour
 
     public void StepFor(PhysicsCollider physics)
     {
-        PhysicsManager pm = Arena != null ? Arena.physicsManager : PhysicsManager.Instance;
-        pm.StepFor(physics, objects); // reuse the real physics step
+        PhysicsManager pm = Arena != null ? Arena.PhysicsManager : PhysicsManager.Instance;
+        pm?.StepFor(physics, objects); // reuse the real physics step
     }
 }

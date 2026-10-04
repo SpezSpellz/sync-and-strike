@@ -60,6 +60,10 @@ public static class HitReaction
         if (blocked)
         {
             ResolveBlocked(victim, attacker, data, knockback);
+            // A blocked hit still connected, it just did chip damage (ResolveBlocked applies it).
+            // Counted so a fighter cannot inflate its hit count by tunnelling into a guard.
+            attacker.CombatStats.RecordHit(0f);
+            victim.CombatStats.RecordDamageTaken(data.damage * PhysicsConstants.BLOCK_CHIP_MODIFIER);
             return false;
         }
 
@@ -69,7 +73,16 @@ public static class HitReaction
             knockback.y = 0f;
 
         victim.IncrementCombo(data.scaleCombo && data.incrementCombo, data.ComboScalingAmount);
-        victim.ApplyDamage(ResolveDamage(attacker, data));
+        float applied = ResolveDamage(attacker, data);
+        victim.ApplyDamage(applied);
+
+        // Combat telemetry. Counted here because this is the single point where a hit is known to
+        // have actually connected - HitboxManager only knows a hitbox overlapped, and a blocked hit
+        // returns early above without doing damage. The cooperative reward needs per-fighter damage
+        // to divide the shared win bonus, and the training report needs a whiff rate, which requires
+        // counting ATTACKS as well as hits.
+        attacker.CombatStats.RecordHit(applied);
+        victim.CombatStats.RecordDamageTaken(applied);
 
         // DI strength differs between grounded (3.5) and aerial (2.0) hurt.
         float diStrength = grounded ? PhysicsConstants.DI_STRENGTH_GROUNDED : PhysicsConstants.DI_STRENGTH_AERIAL;

@@ -219,6 +219,17 @@ public static class PhysicsConstants
     /// <summary>Default hitstun for a hit that does not specify its own.</summary>
     public const int HITSTUN_FRAMES = 30;
 
+    /// <summary>
+    /// Longest hitstun a fighter can be put into, used to normalise the hitstun observation feature.
+    ///
+    /// A knockdown holds the victim in HurtState until they land (see KnockdownState, which sets
+    /// hitstun to int.MaxValue and releases only when the turn ends or the fighter dies), so the raw
+    /// HitstunRemaining count is effectively unbounded and useless as a network input. Dividing by a
+    /// finite ceiling keeps the feature in range. It is deliberately generous: a value above the real
+    /// ceiling would squash every meaningful hitstun into a tiny fraction of the feature's range.
+    /// </summary>
+    public const float MAX_HITSTUN_FRAMES = 120f;
+
     /// <summary>Default hitlag applied to the attacker.</summary>
     public const int HITLAG_FRAMES = 4;
 

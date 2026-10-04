@@ -9,7 +9,7 @@ public abstract class PhysicsCollider : MonoBehaviour
         if (!skipPhysicsManagerRegistration)
         {
             var arena = GetComponentInParent<Arena>();
-            var pm = arena != null ? arena.physicsManager : PhysicsManager.Instance;
+            var pm = arena != null ? arena.PhysicsManager : PhysicsManager.Instance;
             this.colliderId = pm.RegisterCollider(this);
         }
     }

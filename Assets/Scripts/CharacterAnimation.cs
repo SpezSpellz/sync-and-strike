@@ -32,7 +32,19 @@ public class CharacterAnimation : MonoBehaviour
 
     private void Awake()
     {
-        Debug.Log($"SpriteRenderer: {spriteRenderer}");
+        // Fall back to a renderer on the same GameObject when none was assigned in the inspector.
+        // Training spawns fighters from code, where a [SerializeField] reference cannot be authored,
+        // so without this every spawned fighter would be invisible.
+        if (spriteRenderer == null) spriteRenderer = GetComponent<SpriteRenderer>();
+    }
+
+    /// <summary>
+    /// Attach a renderer at runtime. Used by the training spawner, which builds fighters in code and
+    /// therefore cannot rely on the inspector-assigned reference.
+    /// </summary>
+    public void SetSpriteRenderer(SpriteRenderer renderer)
+    {
+        spriteRenderer = renderer;
     }
 
     public void Initialize(AnimationData[] data)
