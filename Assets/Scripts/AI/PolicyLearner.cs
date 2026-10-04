@@ -88,6 +88,14 @@ public class PolicyLearner
         /// </summary>
         public readonly List<float[]> cloneObs = new List<float[]>();
         public readonly List<int> cloneActions = new List<int>();
+
+        // Expert jump/DI values as RAW z targets for the clone regression. One entry per cloneObs, and a
+        // null entry means "the expert supplied no geometry for this sample", so a policy without scalars
+        // degrades to cloning the move alone instead of failing.
+        public readonly List<float[]> cloneScalarZ = new List<float[]>();
+
+        // Range descriptors for turning an expert gameplay value into a raw z.
+        public ContinuousHead[] cloneHeads;
     }
 
     /// <summary>
@@ -128,6 +136,8 @@ public class PolicyLearner
         public float lastReward { get => brain.lastReward; set => brain.lastReward = value; }
         public List<float[]> cloneObs => brain.cloneObs;
         public List<int> cloneActions => brain.cloneActions;
+        public List<float[]> cloneScalarZ => brain.cloneScalarZ;
+        public ContinuousHead[] cloneHeads { get => brain.cloneHeads; set => brain.cloneHeads = value; }
     }
 
     private static readonly Dictionary<int, Session> sessions = new Dictionary<int, Session>();
@@ -151,6 +161,13 @@ public class PolicyLearner
     private const int CloneBatchSize = 32;
     private const int SaveEveryUpdates = 25;
     private const int Hidden = 32;
+
+    // Gaussian scalar heads per policy: jump power, jump angle, DI power, DI angle.
+    //
+    // Overridable so the hybrid policy can be A/B measured against the previous move-only behaviour by
+    // passing -ppo.scalars=0, and so a network trained without scalars can still be loaded and used.
+    private static int scalarsPerPolicy = ActionScalars.Count;
+    private static int ScalarsPerPolicy => Mathf.Clamp(scalarsPerPolicy, 0, ActionScalars.Count);
     private const float CloneLearningRate = 1e-3f;
 
     /// <summary>
@@ -202,6 +219,7 @@ public class PolicyLearner
     {
         switch (field)
         {
+            case "scalars": scalarsPerPolicy = Mathf.Clamp(Mathf.RoundToInt(value), 0, ActionScalars.Count); return true;
             case "normalizer": normalizer.enabled = value != 0f; return true;
             case "normalizePersist": normalizer.persist = value != 0f; return true;
             case "learningRate": sharedHyper.learningRate = value; return true;
@@ -278,7 +296,7 @@ public class PolicyLearner
             // Join an existing brain. A fresh NeuralPolicy over the SHARED network, so this fighter
             // keeps its own pending transition, and its own warm-start flag mirror below.
             var joined = new NeuralPolicy(owner, ruleBrain, brain.net,
-                                          new System.Random(owner.GetInstanceID()));
+                                          new System.Random(owner.GetInstanceID()), ScalarsPerPolicy);
             joined.Trainer = brain.trainer;
             joined.Role = role;
             joined.ForceExpert = brain.warmStart;
@@ -302,10 +320,10 @@ public class PolicyLearner
 
         int obsSize = AIDecisionContext.FeatureNames().Length;
         // The action count depends on the unique move ids, so read it off a throwaway policy.
-        var probe = new NeuralPolicy(owner, ruleBrain, new NeuralNetwork(obsSize, Hidden, 2, 1), new System.Random(1));
+        var probe = new NeuralPolicy(owner, ruleBrain, new NeuralNetwork(obsSize, Hidden, 2, 1, ScalarsPerPolicy), new System.Random(1));
         int actionCount = probe.ActionCount;
 
-        var net = new NeuralNetwork(obsSize, Hidden, actionCount, owner.GetInstanceID());
+        var net = new NeuralNetwork(obsSize, Hidden, actionCount, owner.GetInstanceID(), ScalarsPerPolicy);
         // Only treat saved weights as a starting point when the run explicitly asks to resume.
         // Auto-resuming made an earlier, barely-trained file permanently disable the expert warm
         // start, and the policy then collapsed onto a single do-nothing move.
@@ -318,7 +336,7 @@ public class PolicyLearner
         if (resumed) LoadNormalizerStats(role);
 
         var trainer = new PPOTrainer(net, sharedHyper, new System.Random(owner.GetInstanceID()));
-        var policy = new NeuralPolicy(owner, ruleBrain, net, new System.Random(owner.GetInstanceID()));
+        var policy = new NeuralPolicy(owner, ruleBrain, net, new System.Random(owner.GetInstanceID()), ScalarsPerPolicy);
         policy.Trainer = trainer;
 
         // A fresh policy that will be trained needs the rule-based warm start, otherwise it starts random
@@ -369,6 +387,7 @@ public class PolicyLearner
         public int rejected;
         public int nonfinite;
         public int clippedSteps;
+        public int clippedCriticSteps;
         public bool poisoned;
         public float maxAbsWeight;
     }
@@ -399,6 +418,7 @@ public class PolicyLearner
                 rejected = b.trainer.RejectedTransitionCount,
                 nonfinite = b.trainer.NonFiniteSteps,
                 clippedSteps = b.trainer.ClippedSteps,
+                clippedCriticSteps = b.trainer.ClippedCriticSteps,
                 poisoned = b.trainer.NetworkIsPoisoned,
                 maxAbsWeight = b.trainer.MaxAbsWeight,
             };
@@ -430,11 +450,13 @@ public class PolicyLearner
             // what we want, but each fighter contributes its own observations.
             s.cloneObs.Add(p.LastObs);
             s.cloneActions.Add(p.LastExpertAction);
+            s.cloneScalarZ.Add(ExpertScalarTargets(s));
             if (s.cloneObs.Count >= CloneBatchSize)
             {
                 CloneBatch(s);
                 s.cloneObs.Clear();
                 s.cloneActions.Clear();
+                s.cloneScalarZ.Clear();
             }
             s.hasPending = true;
             s.pendingSelfHealth = p.LastSelfHealth;
@@ -512,8 +534,13 @@ public class PolicyLearner
             reward -= rewardConfig.stalemate;
 
         var nextObs = s.policy.CaptureObservation(self, target, ally);
+        // The raw scalar samples ride along with the transition. Cloned rather than referenced, because
+        // the policy reuses and overwrites that array on the very next decision and the buffer has to
+        // keep describing the action that was actually played.
+        float[] rawZ = s.policy.ScalarCount > 0 ? (float[])s.policy.LastRawZ.Clone() : null;
         s.trainer.Add(s.policy.LastObs, nextObs, s.policy.LastAction,
-                      s.policy.LastLogProb, s.policy.LastValue, reward, done);
+                      s.policy.LastLogProb, s.policy.LastValue, reward, done, rawZ,
+                      agentId: self.GetInstanceID(), episode: s.trainer.CurrentEpisode);
         WarnIfPoisoned(s);
         s.lastReward = reward;
         s.turns++;
@@ -558,6 +585,28 @@ public class PolicyLearner
             if (kv.Value.role == role) kv.Value.policy.ForceExpert = false;
     }
 
+    // Convert the rule-based expert's gameplay-space jump/DI values into raw z targets for the clone
+    // regression. Returns null when there is nothing usable, so the caller falls back to cloning the
+    // move alone rather than injecting a bad target.
+    private static float[] ExpertScalarTargets(Session s)
+    {
+        if (s.owner == null || !s.owner.HasExpertGeometry) return null;
+        AIDecision expert = s.owner.ExpertGeometry;
+
+        var heads = s.cloneHeads ?? (s.cloneHeads = ActionScalars.CreateAll());
+        var z = new float[heads.Length];
+        z[ActionScalars.JumpPower] = heads[ActionScalars.JumpPower].Unsquash(expert.jumpPower);
+        z[ActionScalars.JumpAngle] = heads[ActionScalars.JumpAngle].Unsquash(expert.jumpAngle);
+        z[ActionScalars.DiPower] = heads[ActionScalars.DiPower].Unsquash(expert.diPower);
+        z[ActionScalars.DiAngle] = heads[ActionScalars.DiAngle].Unsquash(expert.diAngle);
+
+        // Refuse non-finite targets. A garbage expert value would otherwise put a NaN straight into the
+        // clone gradient, which is precisely how an earlier training run killed every policy at once.
+        for (int i = 0; i < z.Length; i++)
+            if (float.IsNaN(z[i]) || float.IsInfinity(z[i])) return null;
+        return z;
+    }
+
     private static void OnVoteResolved(int key, bool isGood, bool timedOut)
     {
         if (!sessions.TryGetValue(key, out var s)) return;
@@ -572,6 +621,7 @@ public class PolicyLearner
     private static void CloneBatch(Session s)
     {
         if (s.cloneObs.Count == 0) return;
+        if (s.cloneHeads == null) s.cloneHeads = ActionScalars.CreateAll();
 
         // Never clone onto a poisoned network. Warm start runs at the very start of a session, so this
         // is cheap insurance rather than a routine check.
@@ -580,15 +630,35 @@ public class PolicyLearner
             Debug.LogWarning($"[Training] {s.role}: network has non-finite weights; skipping clone batch.");
             s.cloneObs.Clear();
             s.cloneActions.Clear();
+            s.cloneScalarZ.Clear();
             return;
         }
 
         s.net.ClearGradients();
+        var heads = s.cloneHeads;
+        var dMu = new float[ActionScalars.Count];
+        var dLogSd = new float[ActionScalars.Count];
         for (int i = 0; i < s.cloneObs.Count; i++)
         {
             s.net.Forward(s.cloneObs[i]);
             // Maximising log pi(expert) is exactly dLogProb = 1 on the expert action.
-            s.net.Backprop(s.cloneObs[i], s.cloneActions[i], 1f, 0f, 0f);
+            float[] targetZ = s.cloneScalarZ.Count > i ? s.cloneScalarZ[i] : null;
+            if (targetZ != null && heads != null)
+            {
+                // Pull each scalar mean toward the EXPERT's value, as a regression rather than as a
+                // log-prob. Maximising log N(z_expert; mu, sd) would drag sigma toward zero as well as
+                // mu toward the target, collapsing the head's spread; this moves only the mean and
+                // leaves exploration intact.
+                var means = s.net.ScalarMeans;
+                for (int k = 0; k < heads.Length; k++) dMu[k] = means[k] - targetZ[k];
+                Array.Clear(dLogSd, 0, dLogSd.Length);
+            }
+            else
+            {
+                Array.Clear(dMu, 0, dMu.Length);
+                Array.Clear(dLogSd, 0, dLogSd.Length);
+            }
+            s.net.Backprop(s.cloneObs[i], s.cloneActions[i], 1f, 0f, 0f, dMu, dLogSd);
         }
         s.net.ApplyGradients(CloneLearningRate / s.cloneObs.Count);
     }
@@ -702,6 +772,17 @@ public class PolicyLearner
     }
 
     /// <summary>
+    /// <summary>
+    /// Tell every brain that the current match has ended, so GAE does not chain across the reset: the
+    /// final states of one match are not the predecessors of the opening states of the next.
+    ///
+    /// Called by the training runner. The shipped game has no rollout buffer to invalidate.
+    /// </summary>
+    public static void NotifyMatchReset()
+    {
+        foreach (var kv in sessions) kv.Value.brain.trainer.BeginEpisode();
+    }
+
     /// Credit a match result to a fighter's most recent transition. The per-turn reward is dense but
     /// says nothing about whether the match was actually won, so a sparse terminal bonus is added to
     /// the last transition of the match. This is what lets a policy learn to finish a fight rather

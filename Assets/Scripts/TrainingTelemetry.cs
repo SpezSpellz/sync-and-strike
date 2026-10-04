@@ -42,7 +42,9 @@ public static class TrainingTelemetry
         "health_left,reward_last,entropy,entropy_unmasked,legal_action_count," +
         "action_share_top1,updates,turns_recorded," +
         "explained_variance,approx_kl,clip_fraction,value_loss,advantage_magnitude," +
-        "rejected_transitions,nonfinite_grad_steps,clipped_grad_steps,network_poisoned,max_abs_weight";
+        "rejected_transitions,nonfinite_grad_steps,clipped_grad_steps,network_poisoned,max_abs_weight," +
+        "logprob_categorical,logprob_scalar,jump_power,jump_angle,di_power,di_angle," +
+        "sd_jump_power,sd_jump_angle,sd_di_power,sd_di_angle";
 
     /// <summary>
     /// Open the run's CSV. The file is timestamped so successive runs do not overwrite each other's
@@ -140,6 +142,17 @@ public static class TrainingTelemetry
                       .Append(policy != null && policy.Trainer != null && policy.Trainer.NetworkIsPoisoned ? 1 : 0)
                       .Append(',')
                       .Append(Num(policy != null && policy.Trainer != null ? policy.Trainer.MaxAbsWeight : 0f))
+                      .Append(',')
+                      .Append(Num(policy != null ? policy.LastCategoricalLogProb : 0f)).Append(',')
+                      .Append(Num(policy != null ? policy.LastScalarLogProb : 0f)).Append(',')
+                      .Append(Num(policy != null ? policy.LastScalarValue[ActionScalars.JumpPower] : 0f)).Append(',')
+                      .Append(Num(policy != null ? policy.LastScalarValue[ActionScalars.JumpAngle] : 0f)).Append(',')
+                      .Append(Num(policy != null ? policy.LastScalarValue[ActionScalars.DiPower] : 0f)).Append(',')
+                      .Append(Num(policy != null ? policy.LastScalarValue[ActionScalars.DiAngle] : 0f)).Append(',')
+                      .Append(Num(policy != null ? policy.ScalarSd(ActionScalars.JumpPower) : 0f)).Append(',')
+                      .Append(Num(policy != null ? policy.ScalarSd(ActionScalars.JumpAngle) : 0f)).Append(',')
+                      .Append(Num(policy != null ? policy.ScalarSd(ActionScalars.DiPower) : 0f)).Append(',')
+                      .Append(Num(policy != null ? policy.ScalarSd(ActionScalars.DiAngle) : 0f))
                       .Append('\n');
             }
 

@@ -32,6 +32,41 @@ public class NeuralPolicy : FighterPolicy
     public float LastSelfHealth { get; private set; }
     public float LastTargetHealth { get; private set; }
 
+    // --- Hybrid policy: the scalar (Gaussian) half ---
+
+    /// <summary>How many scalar heads this policy drives. Zero disables the whole mechanism.</summary>
+    public int ScalarCount { get; }
+
+    /// <summary>Per-head range descriptors and per-sample scratch, reused every decision.</summary>
+    private readonly ContinuousHead[] heads;
+
+    /// <summary>
+    /// Raw pre-squash samples from the last decision. These are what the transition carries, because the
+    /// Gaussian log-prob is a density over the raw value rather than over the gameplay value.
+    /// </summary>
+    public readonly float[] LastRawZ;
+
+    /// <summary>Denormalised scalar values from the last decision, in gameplay units.</summary>
+    public readonly float[] LastScalarValue;
+
+    /// <summary>Categorical term of the joint log-prob from the last decision.</summary>
+    public float LastCategoricalLogProb { get; private set; }
+
+    /// <summary>Sum of the Gaussian terms of the joint log-prob from the last decision.</summary>
+    public float LastScalarLogProb { get; private set; }
+
+    // Current standard deviation of a scalar head, for telemetry.
+    //
+    // Logged because two or three of the four heads are INERT on a typical turn - jump geometry only
+    // matters for jumps, DI only during hitstun - so their sigma is expected to drift upward while mu is
+    // ignored. Harmless while the game clamps, but worth watching rather than inferring, and it is the
+    // signal that would justify gating these heads or giving them a lower entropy weight.
+    public float ScalarSd(int index)
+    {
+        if (index < 0 || index >= ScalarCount) return 0f;
+        return Mathf.Exp(net.ScalarLogSd[index]);
+    }
+
     /// <summary>When true the rule-based move is used instead of the sampled one (warm start).</summary>
     public bool ForceExpert { get; set; }
 
@@ -153,11 +188,23 @@ public class NeuralPolicy : FighterPolicy
     }
 
     public NeuralPolicy(CharacterController owner, FighterAI helper, NeuralNetwork net, System.Random rng)
+        : this(owner, helper, net, rng, ActionScalars.Count)
+    {
+    }
+
+    // scalarCount Gaussian heads to drive. Pass 0 for the move-only policy, which is the pre-hybrid
+    // behaviour, still supported so this change can be A/B measured against it.
+    public NeuralPolicy(CharacterController owner, FighterAI helper, NeuralNetwork net, System.Random rng,
+                        int scalarCount)
     {
         this.helper = helper;
         this.net = net;
         this.rng = rng;
         MoveIds = BuildMoveIds(owner);
+        ScalarCount = Mathf.Clamp(scalarCount, 0, ActionScalars.Count);
+        heads = ActionScalars.CreateAll();
+        LastRawZ = new float[ScalarCount];
+        LastScalarValue = new float[ScalarCount];
     }
 
     private static string[] BuildMoveIds(CharacterController owner)
@@ -228,7 +275,8 @@ public class NeuralPolicy : FighterPolicy
         int expertMove = IndexOfMove(expert.moveId);
         LastExpertAction = ClampAction(expertMove * 2 + (expert.flipped ? 1 : 0));
 
-        LastValue = net.Forward(obs);
+        net.Forward(obs);
+        LastValue = net.Value;
         var rawLogits = net.Logits;
         // Mask illegal actions before sampling so the policy can never pick an unperformable move.
         var logits = new float[ActionCount];
@@ -245,11 +293,31 @@ public class NeuralPolicy : FighterPolicy
         }
         action = ClampAction(action);
         LastAction = action;
-        // Store the log-prob over the FULL (unmasked) distribution, because that is what
-        // PPOTrainer recomputes during the update. Using the masked log-prob here would make the
-        // importance ratio exp(newLogProb - storedLogProb) compare two different distributions and
-        // silently corrupt every gradient.
-        LastLogProb = LogProbFromLogits(rawLogits, action);
+
+        // --- Sample the scalars ---
+        //
+        // Always drawn, even during warm start, so LastRawZ is valid for the transition. During warm
+        // start the sampled VALUES are discarded in favour of the expert's geometry - but the raw z is
+        // still recorded, because the stored log-prob has to belong to the action that was actually
+        // played. Storing an expert geometry next to a policy log-prob would make the importance ratio
+        // meaningless for the whole buffer.
+        SampleScalars();
+
+        // Store the log-prob over the FULL (unmasked) categorical PLUS the Gaussian terms, because
+        // that joint sum is what PPOTrainer recomputes during the update. Using the masked log-prob here
+        // would make the importance ratio exp(newLogProb - storedLogProb) compare two different
+        // distributions and silently corrupt every gradient.
+        float catLogProb = LogProbFromLogits(rawLogits, action);
+        float scalarLogProb = 0f;
+        for (int s = 0; s < ScalarCount; s++) scalarLogProb += heads[s].LogProbRaw(LastRawZ[s]);
+        LastLogProb = catLogProb + scalarLogProb;
+
+        // The split is recorded so the balance between the two halves of the joint log-prob stays
+        // visible. If the Gaussian terms dominate, the importance ratio becomes mostly about aim and
+        // the effective clipping on the MOVE head changes - which would look like the policy learning to
+        // aim well while quietly getting worse at choosing moves.
+        LastCategoricalLogProb = catLogProb;
+        LastScalarLogProb = scalarLogProb;
 
         // Diagnostics are measured on the MASKED distribution: those are the moves the policy could
         // actually pick, so including the illegal ones would understate its real confidence. The
@@ -267,8 +335,40 @@ public class NeuralPolicy : FighterPolicy
         var decision = expert;
         decision.moveId = MoveIds[action / 2];
         decision.flipped = (action % 2) == 1;
+
+        if (!ForceExpert && ScalarCount > 0)
+        {
+            // The policy owns its own aim once warm start is over, so all four scalars come from the
+            // Gaussian heads rather than from the rule-based brain.
+            decision.jumpPower = LastScalarValue[ActionScalars.JumpPower];
+            decision.jumpAngle = LastScalarValue[ActionScalars.JumpAngle];
+            decision.diPower = LastScalarValue[ActionScalars.DiPower];
+            decision.diAngle = LastScalarValue[ActionScalars.DiAngle];
+        }
+
         decision.rationale = ForceExpert ? "ppo (warm start expert)" : "ppo";
         return decision;
+    }
+
+    /// <summary>
+    /// Draw one raw sample per scalar head, recording both the raw z and the denormalised value.
+    ///
+    /// The RAW z is what goes on the transition, not the gameplay value, because the Gaussian log-prob
+    /// is a density over z. Storing the squashed value would force the trainer to invert the squash to
+    /// recover z, and the clamping in that round trip would move the action the log-prob describes.
+    /// </summary>
+    private void SampleScalars()
+    {
+        if (ScalarCount == 0) return;
+        var means = net.ScalarMeans;
+        var logSds = net.ScalarLogSd;
+        for (int s = 0; s < ScalarCount; s++)
+        {
+            heads[s].mu = means[s];
+            heads[s].logSd = logSds[s];
+            LastRawZ[s] = heads[s].SampleZ(rng);
+            LastScalarValue[s] = heads[s].Squash(LastRawZ[s]);
+        }
     }
 
     /// <summary>

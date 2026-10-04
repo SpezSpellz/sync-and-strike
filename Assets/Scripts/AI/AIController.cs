@@ -68,6 +68,16 @@ public abstract class AIController : CharacterController
     /// </summary>
     public NeuralPolicy PolicyForTelemetry => PolicyLearner.PolicyFor(this);
 
+    // The geometry the rule-based brain chose on the most recent decision, or null before the first
+    // decision. Read by the warm-start clone so the policy inherits the expert's aim, not just its move
+    // choice. This is deliberately a snapshot of the RULE brain's output: once warm start ends the policy
+    // supplies its own, and cloning from the policy's own output would just reinforce itself.
+    public AIDecision ExpertGeometry { get; private set; }
+
+    // False before the first RequestDecision, so the clone path can tell "no expert geometry yet" from
+    // "expert geometry is all zeros".
+    public bool HasExpertGeometry { get; private set; }
+
     private static FighterAI.Personality CopyPersonality(FighterAI.Personality from)
     {
         return new FighterAI.Personality
@@ -117,6 +127,8 @@ public abstract class AIController : CharacterController
         CurrentDecision = brain.Decide(this, target, ResolveAlly());
         DecisionContext = AIDecisionContext.Capture(this, target, ResolveAlly(), CurrentDecision);
 
+        ExpertGeometry = CurrentDecision;
+        HasExpertGeometry = true;
         ApplyDecision(CurrentDecision);
         TurnMgr.SubmitMove(this);
     }
