@@ -23,9 +23,12 @@ public class EnemyController : AIController
     protected override FighterPolicy SelectBrain()
     {
         // In a -training run the enemy always uses the trainable policy, which is how it gets
-        // trained offline in the first place. Outside training it only uses a trained policy if one
-        // has actually been produced; otherwise it stays on the rule-based brain.
-        if (!useTrainedPolicy && !TrainingMode.enabled) return ruleBrain;
+        // trained offline in the first place. Outside training it uses a trained policy when the build
+        // actually ships one, or when the checkbox forces it; otherwise it stays on the rule-based brain.
+        // Auto-detecting the shipped file means a build that exported its frozen enemy needs no manual
+        // step, and a build that did not export one can never end up running an untrained network.
+        if (!useTrainedPolicy && !TrainingMode.enabled
+            && !PolicyLearner.HasShippedWeights(PolicyLearner.RoleEnemy)) return ruleBrain;
         // learnOnline: false -> outside a training run this role is frozen and never adapts during
         // a player's match. PolicyLearner unfreezes it only when TrainingMode.enabled.
         return PolicyLearner.CreatePolicy(this, ruleBrain, PolicyLearner.RoleEnemy, learnOnline: false);

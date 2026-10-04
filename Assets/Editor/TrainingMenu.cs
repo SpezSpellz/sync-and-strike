@@ -1,3 +1,4 @@
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 
@@ -59,9 +60,12 @@ public static class TrainingMenu
         // means an older rig silently keeps stale settings forever - which is exactly how reporting
         // ended up quiet until match 25.
         //
-        // One arena: far easier to read the log with a single match in flight, and this is for
-        // verifying the loop rather than throughput. Report every match so progress is visible.
-        runner.arenaCount = 1;
+        // Eight arenas, not one. TurnManager now spends a whole Unity frame's simulation budget rather
+        // than stopping after a single resolved turn, so a frame can carry many turns; arenas are the
+        // cheapest way to use the rest of that budget, and self-play only improves with more concurrent
+        // opponents. One arena left the frame mostly idle and threw away throughput. Override from the
+        // command line with -arenas=N (up to 64).
+        runner.arenaCount = 8;
         runner.reportEvery = 1;
 
         if (created)
@@ -69,5 +73,40 @@ public static class TrainingMenu
             Undo.RegisterCreatedObjectUndo(go, "Create Training Rig");
             Debug.Log("[Training] Created TrainingRig. Use Tools > Training > Start Training In Editor.");
         }
+    }
+
+    private const string ShippedDir = "Assets/StreamingAssets/AI";
+
+    /// <summary>
+    /// Copy a trained role's runtime weights into StreamingAssets so a build ships them.
+    ///
+    /// This copies the FILE rather than calling PolicyLearner.ExportRole because that method reads a
+    /// live session, and there is no session in edit mode. Copying the file the trainer last wrote is also
+    /// more honest: it is exactly the weights the run finished on.
+    ///
+    /// Exporting the enemy here is what makes the shipped enemy the trained one: a frozen role reads this
+    /// copy FIRST (see PolicyLearner.LoadWeights), ahead of any stray file in a player's persistent data.
+    /// </summary>
+    [MenuItem("Tools/Training/Export Frozen Enemy")]
+    public static void ExportFrozenEnemy() => ExportWeights("enemy");
+
+    /// <summary>Ship a companion starting point. A player who has already trained one keeps their own.</summary>
+    [MenuItem("Tools/Training/Export Companion Baseline")]
+    public static void ExportCompanionBaseline() => ExportWeights("companion");
+
+    private static void ExportWeights(string role)
+    {
+        var src = Path.Combine(Application.persistentDataPath, role + "_policy.json");
+        if (!File.Exists(src))
+        {
+            Debug.LogError($"[Training] No trained {role} weights at {src}. Run a training run first.");
+            return;
+        }
+        Directory.CreateDirectory(ShippedDir);
+        var dst = Path.Combine(ShippedDir, role + "_policy.json");
+        File.Copy(src, dst, true);
+        AssetDatabase.ImportAsset(dst.Replace('\\', '/'));
+        Debug.Log($"[Training] Exported {role} policy ({new FileInfo(dst).Length / 1024} KB) to {dst}. "
+            + "Commit the file so a build ships it.");
     }
 }

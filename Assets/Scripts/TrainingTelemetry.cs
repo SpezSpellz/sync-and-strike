@@ -44,7 +44,8 @@ public static class TrainingTelemetry
         "explained_variance,approx_kl,clip_fraction,value_loss,advantage_magnitude," +
         "rejected_transitions,nonfinite_grad_steps,clipped_grad_steps,network_poisoned,max_abs_weight," +
         "logprob_categorical,logprob_scalar,jump_power,jump_angle,di_power,di_angle," +
-        "sd_jump_power,sd_jump_angle,sd_di_power,sd_di_angle";
+        "sd_jump_power,sd_jump_angle,sd_di_power,sd_di_angle," +
+        "epochs_run,kl_all_epochs";
 
     /// <summary>
     /// Open the run's CSV. The file is timestamped so successive runs do not overwrite each other's
@@ -153,6 +154,11 @@ public static class TrainingTelemetry
                       .Append(Num(policy != null ? policy.ScalarSd(ActionScalars.JumpAngle) : 0f)).Append(',')
                       .Append(Num(policy != null ? policy.ScalarSd(ActionScalars.DiPower) : 0f)).Append(',')
                       .Append(Num(policy != null ? policy.ScalarSd(ActionScalars.DiAngle) : 0f))
+                      // Epochs actually run and the KL the early stop watches. Both are needed to tell
+                      // "the policy is learning" from "the update overshot and was cut short", which
+                      // approx_kl (epoch 0 only) cannot show on its own.
+                      .Append(',').Append(policy != null && policy.Trainer != null ? policy.Trainer.EpochsRun : 0)
+                      .Append(',').Append(Num(policy != null && policy.Trainer != null ? policy.Trainer.MeanKlAcrossEpochs : 0f))
                       .Append('\n');
             }
 

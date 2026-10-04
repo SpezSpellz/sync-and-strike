@@ -54,16 +54,20 @@ public static class PhysicsConstants
     public const float MAX_GROUND_SPEED = 25f * PX;
 
     /// <summary>
-    /// Cap on horizontal speed while airborne under the limited force pass (reference value
-    /// 10px). Like <see cref="MAX_GROUND_SPEED"/> this is only reached outside hurt states.
+    /// Cap on horizontal speed while airborne under the limited force pass. The reference character
+    /// (BaseChar.tscn) authors 13px; this read 12px and its comment cited the 10px BaseObj default,
+    /// which is not the value the ported character actually uses. Like <see cref="MAX_GROUND_SPEED"/> this
+    /// is only reached outside hurt states.
     /// </summary>
-    public const float MAX_AIR_SPEED = 12f * PX;
+    public const float MAX_AIR_SPEED = 13f * PX;
 
     /// <summary>
-    /// Maximum downward speed (15px). Applied by the gravity pass, not the speed-limit pass, so
+    /// Maximum downward speed. The reference character (BaseChar.tscn) authors this as 8px, not the
+    /// 15px BaseObj default the port copied - 15 was almost twice the reference, which made every fall,
+    /// jump arc and landing impact too fast. Applied by the gravity pass, not the speed-limit pass, so
     /// it stays in force during knockback.
     /// </summary>
-    public const float MAX_FALL_SPEED = 15f * PX;
+    public const float MAX_FALL_SPEED = 8f * PX;
 
     /// <summary>Speed below which a grounded character is considered settled.</summary>
     public const float GROUND_SETTLE_SPEED = 0.5f * PX;

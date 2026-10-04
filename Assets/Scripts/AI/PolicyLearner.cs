@@ -28,8 +28,8 @@ public class PolicyLearner
     public class RewardConfig
     {
         public float hitLanded = 0.5f;
-        public float damageDealt = 0.02f;   // per health point
-        public float damageTaken = 0.03f;   // per health point
+        public float damageDealt = 0.04f;  // per health point
+        public float damageTaken = 0.02f;  // per health point
         public float killBonus = 5f;
 
         /// <summary>
@@ -39,8 +39,28 @@ public class PolicyLearner
         /// separation every action, including doing nothing, scores exactly 0. A policy in that
         /// situation cannot tell good from bad, and empirically collapsed onto "block" and stayed
         /// there forever. Closing distance is the first thing a fighter has to learn.
+        ///
+        /// Per WORLD UNIT, and the fighters start roughly 20 units apart.
+        ///
+        /// Three runs have now bracketed this value, which is worth recording because both extremes were
+        /// measured rather than assumed:
+        ///
+        ///   0.4  - too strong. Worth +8 per match and up to +0.4 in a single turn, twenty times a landed
+        ///          hit. Policies learned to sit where their attacks could not reach: whiff 0.993, ~10
+        ///          damage per match, 99% of matches timing out.
+        ///   0.05 - too weak. With the policy also being destroyed by an oversized Adam step, nobody
+        ///          closed the gap: median separation stayed at 16.1 units against a hitbox that reaches
+        ///          about 2.3, so nothing could connect at all.
+        ///   0.15 - chosen. Still only ~+3 per match for closing the whole gap, so it cannot dominate the
+        ///          damage terms, but large enough to be worth doing over several turns from 16 units.
+        ///
+        /// The structural fact this exposes: horizontal_slash reaches ~2.3 units (offsetX 1.3 + half of
+        /// width 2.0) and the rule brain only attacks within attackRange 1.35, so NOTHING can hit from
+        /// where the fighters actually stand. If this value still fails to close the gap, the problem is
+        /// the distance itself - the arena or walkf's reach - not the reward, and more tuning here would
+        /// just be chasing it.
         /// </summary>
-        public float approach = 0.4f;
+        public float approach = 0.15f;
 
         /// <summary>
         /// Reward for a turn that achieved nothing: no damage dealt and no ground gained.
@@ -55,8 +75,14 @@ public class PolicyLearner
         /// Kept small on purpose. It only has to break a tie between doing nothing and trying; if it
         /// ever outweighs landing a hit it teaches the policy to avoid committing to attacks, which
         /// is the opposite of what we want.
+        ///
+        /// It is per TURN, though, and that makes it a term that compounds: at 0.05 over a match
+        /// that timed out at 400 turns it summed to -20, which is larger than the entire win bonus and
+        /// larger than all the damage terms together. The per-turn penalty was therefore the single
+        /// loudest signal in the return, and every policy that minimised it correctly learned never to
+        /// commit. Halved to 0.02 so it stays a tie-breaker rather than the objective.
         /// </summary>
-        public float stalemate = 0.05f;
+        public float stalemate = 0.02f;
 
         public float voteGood = 1.5f;
         public float voteBad = 1.5f;
@@ -96,10 +122,6 @@ public class PolicyLearner
 
     /// <summary>Monte-Carlo return target per clone sample, for value pretraining. See EstimatedReturn.</summary>
     public readonly List<float> cloneReturns = new List<float>();
-
-    /// <summary>Running discounted reward sum during warm start, so each expert turn's return reflects
-    /// everything banked so far this match rather than just the latest turn.</summary>
-    public float warmStartReturn;
 
         // Range descriptors for turning an expert gameplay value into a raw z.
         public ContinuousHead[] cloneHeads;
@@ -146,14 +168,23 @@ public class PolicyLearner
         public List<float[]> cloneScalarZ => brain.cloneScalarZ;
     public List<float> cloneReturns => brain.cloneReturns;
 
-    /// <summary>Running discounted reward sum during warm start. Stored on the BRAIN, not the session,
-    /// because both allies share one brain: keeping it per-fighter would let each one overwrite the
-    /// other's trajectory mid-match and produce returns that belong to neither.</summary>
-    public float warmStartReturn
-    {
-        get => brain.warmStartReturn;
-        set => brain.warmStartReturn = value;
-    }
+    /// <summary>
+    /// Running discounted reward sum during warm start, so each expert turn's return reflects
+    /// everything banked so far this match rather than just the latest turn. Used as the critic's
+    /// value-pretraining target.
+    ///
+    /// Per FIGHTER, not per brain - and this is a correction. It used to live on the SharedBrain,
+    /// because keeping it per-fighter was thought to let the two allies overwrite each other's
+    /// trajectory. The opposite happened: BOTH allies accumulate into it every turn, so the target
+    /// the critic regressed onto was the sum of two independent trajectories rather than either one.
+    /// In 2v1 the critic was therefore pretrained to predict roughly TWICE the return it was ever
+    /// asked for, which is a direct explanation for the enormous return and advantage scale measured
+    /// in the last run (return std ~98 against a value std of 6, advantages up to 1e31).
+    ///
+    /// Per fighter is also simply correct: a return belongs to the trajectory that earned it, and
+    /// each fighter has its own.
+    /// </summary>
+    public float warmStartReturn;
         public ContinuousHead[] cloneHeads { get => brain.cloneHeads; set => brain.cloneHeads = value; }
     }
 
@@ -262,7 +293,10 @@ public class PolicyLearner
             case "epochs": sharedHyper.epochs = Mathf.Max(1, Mathf.RoundToInt(value)); return true;
             case "minibatch": sharedHyper.minibatch = Mathf.Max(2, Mathf.RoundToInt(value)); return true;
             case "bufferSize": sharedHyper.bufferSize = Mathf.Max(8, Mathf.RoundToInt(value)); return true;
+            case "batchSize": sharedHyper.batchSize = Mathf.Max(8, Mathf.RoundToInt(value)); return true;
             case "maxGradNorm": sharedHyper.maxGradNorm = value; return true;
+            case "targetKl": sharedHyper.targetKl = value; return true;
+            case "useAdam": sharedHyper.useAdam = value != 0f; return true;
             case "valueHidden": valueHidden = Mathf.Max(8, Mathf.RoundToInt(value)); return true;
             default:
                 Debug.LogWarning($"[Training] unknown ppo field '{field}'; ignored.");
@@ -356,16 +390,21 @@ public class PolicyLearner
         int actionCount = probe.ActionCount;
 
         var net = new NeuralNetwork(obsSize, Hidden, actionCount, owner.GetInstanceID(), ScalarsPerPolicy, ValueHidden);
-        // Only treat saved weights as a starting point when the run explicitly asks to resume.
-        // Auto-resuming made an earlier, barely-trained file permanently disable the expert warm
-        // start, and the policy then collapsed onto a single do-nothing move.
-        bool resumed = TrainingMode.resume && LoadWeights(net, role);
+        // Weights load whenever they exist, from persistent data or from the build. They used to require
+        // the -resume flag, which meant a shipped companion never carried its learning across sessions
+        // and a shipped enemy never used its trained policy unless the player passed a training switch.
+        WeightSource source = LoadWeights(net, role);
+        bool resumed = source != WeightSource.None;
+        Debug.Log(resumed
+            ? $"[AI] {role} loaded {source} weights (max|weight| {net.MaxAbsWeight:0.###})."
+            : $"[AI] {role} has no trained weights; starting from the rule-based warm start.");
+        WarnIfNoPretrainedCompanion(source, role);
 
-        // Statistics travel with the weights. Loading them only alongside a genuine resume is the
-        // important part: statistics gathered under one network describe that network's behaviour, and
-        // pairing them with a different network would feed the first few hundred turns of a resumed run
-        // nonsense - which is exactly the warm-start window.
-        if (resumed) LoadNormalizerStats(role);
+        // Statistics travel with the weights, and only with the player's own. They describe the input
+        // distribution of one specific network, so pairing SHIPPED weights with local statistics - or the
+        // reverse - feeds the first few hundred turns nonsense, which is exactly the window the warm
+        // start was protecting.
+        if (source == WeightSource.Persistent) LoadNormalizerStats(role);
 
         var trainer = new PPOTrainer(net, sharedHyper, new System.Random(owner.GetInstanceID()));
         var policy = new NeuralPolicy(owner, ruleBrain, net, new System.Random(owner.GetInstanceID()), ScalarsPerPolicy);
@@ -423,6 +462,9 @@ public class PolicyLearner
         public float valueStd, returnStd, valueReturnCorr, chainedFraction;
         public bool poisoned;
         public float maxAbsWeight;
+        public int epochsRun;
+        public int minibatchesRun;
+        public float klAll;
     }
 
     /// <summary>
@@ -458,6 +500,9 @@ public class PolicyLearner
                 chainedFraction = b.trainer.ChainedFraction,
                 poisoned = b.trainer.NetworkIsPoisoned,
                 maxAbsWeight = b.trainer.MaxAbsWeight,
+                epochsRun = b.trainer.EpochsRun,
+                minibatchesRun = b.trainer.MinibatchesRun,
+                klAll = b.trainer.MeanKlAcrossEpochs,
             };
         }
         return result;
@@ -562,7 +607,12 @@ public class PolicyLearner
         if (dmgDealt > 0f) reward += rewardConfig.hitLanded;
         reward += rewardConfig.damageDealt * dmgDealt;
         reward -= rewardConfig.damageTaken * dmgTaken;
-        if (target != null && target.IsDead()) reward += rewardConfig.killBonus;
+        // Paid once, on the turn the kill actually lands. Gating on dmgDealt > 0 means the bonus is only
+        // paid when the target's health DROPPED this turn, i.e. the turn that killed them. Testing only
+        // IsDead() pays +5 on every subsequent turn of the same match, which with gamma=0.99 chains
+        // into a large spurious terminal return - and a dead opponent is exactly the situation that
+        // happens most often at the end of a won match.
+        if (target != null && target.IsDead() && dmgDealt > 0f) reward += rewardConfig.killBonus;
 
         bool done = self.IsDead() || (target != null && target.IsDead());
 
@@ -796,22 +846,112 @@ public class PolicyLearner
         }
     }
 
-    /// <summary>Returns true if trained weights were found and applied.</summary>
-    private static bool LoadWeights(NeuralNetwork net, string role)
+    /// <summary>Where a role's weights came from.</summary>
+    private enum WeightSource
     {
-        try
+        /// <summary>Nothing usable on disk; start from the rule-based warm start.</summary>
+        None,
+
+        /// <summary>The player's own saved progress in persistentDataPath.</summary>
+        Persistent,
+
+        /// <summary>The frozen baseline bundled inside the build.</summary>
+        Shipped,
+    }
+
+    /// <summary>Frozen weights bundled with the build. Written by Tools > Training > Export ...</summary>
+    private static string ShippedPath(string role) =>
+        Path.Combine(Application.streamingAssetsPath, "AI", role + "_policy.json");
+
+    /// <summary>True when this build carries a frozen policy for the role.</summary>
+    public static bool HasShippedWeights(string role)
+    {
+        try { return File.Exists(ShippedPath(role)); }
+        catch (Exception) { return false; }
+    }
+
+    /// <summary>
+    /// Load a role's weights, from whichever source is correct for that role.
+    ///
+    /// A FROZEN role reads the shipped file FIRST: the enemy that plays must be the enemy that shipped,
+    /// and it must never silently pick up a stray enemy_policy.json that a training run left in a
+    /// player's persistent data. A LEARNING role reads its own persistent file first, because that is the
+    /// progress the player earned and the shipped baseline is only a starting point.
+    ///
+    /// A file that parses but carries no trained signal - all zeros, or non-finite - is treated as absent
+    /// so the caller falls back to the rule-based warm start. That guard is load-bearing: an earlier,
+    /// barely trained file silently disabled the warm start and the policy collapsed onto one move.
+    /// </summary>
+    private static WeightSource LoadWeights(NeuralNetwork net, string role)
+    {
+        bool frozen = FrozenRoles.Contains(role);
+        var paths = frozen
+            ? new[] { ShippedPath(role), SavePath(role) }
+            : new[] { SavePath(role), ShippedPath(role) };
+
+        foreach (var path in paths)
         {
-            var path = SavePath(role);
-            if (!File.Exists(path)) return false;
-            var weights = JsonUtility.FromJson<NeuralNetwork.Weights>(File.ReadAllText(path));
-            net.Import(weights);
-            return true;
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) continue;
+            try
+            {
+                var weights = JsonUtility.FromJson<NeuralNetwork.Weights>(File.ReadAllText(path));
+                if (!net.Import(weights))
+                {
+                    Debug.LogWarning($"[AI] {role} weights at {path} do not match this network's shape; ignored.");
+                    continue;
+                }
+                net.RecomputeMaxWeight();
+                if (!net.WeightsAreFinite() || net.MaxAbsWeight < 1e-4f)
+                {
+                    Debug.LogWarning($"[AI] {role} weights at {path} carry no trained signal; ignored.");
+                    continue;
+                }
+                // The moments describe the trajectory that PRODUCED these weights, which may have come
+                // from a different network or a different optimiser. Keeping them would push the first
+                // few steps in a direction unrelated to what was just loaded.
+                net.ResetOptimizerState();
+                return path == SavePath(role) ? WeightSource.Persistent : WeightSource.Shipped;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"Could not load {role} policy from {path}: {e.Message}");
+            }
         }
-        catch (Exception e)
-        {
-            Debug.LogWarning($"Could not load {role} policy: {e.Message}");
-            return false;
-        }
+        return WeightSource.None;
+    }
+
+    /// <summary>Set once the "no pretrained companion" warning has been logged, so 2v1 building two
+    /// fighters on one network does not print the same warning twice.</summary>
+    private static bool warnedNoPretrainedCompanion;
+
+    /// <summary>
+    /// Tell the player ONCE that the companion has no pretrained weights, in the shipped game.
+    ///
+    /// Silent fallback is the wrong default here. The companion works perfectly well without weights - it
+    /// plays the rule-based brain and warm-starts from it - so nothing looks broken, and that is the
+    /// problem. What the player cannot see is that the companion they are getting is NOT the trained one,
+    /// and that it will not become trained until they have played a few hundred turns. So this states it
+    /// plainly and names both paths the weights were supposed to have arrived by.
+    ///
+    /// Suppressed during a training run, where starting with no weights is the normal state rather than a
+    /// deployment mistake.
+    /// </summary>
+    private static void WarnIfNoPretrainedCompanion(WeightSource source, string role)
+    {
+        if (warnedNoPretrainedCompanion) return;
+        if (role != RoleCompanion) return;
+        if (source != WeightSource.None) return;
+        if (TrainingMode.enabled) return;
+
+        warnedNoPretrainedCompanion = true;
+        Debug.LogWarning(
+            "[AI] The companion has NO PRETRAINED WEIGHTS. It will play the rule-based brain and begin "
+            + "learning from your votes and match outcomes, reaching roughly the trained quality only "
+            + "after a few hundred turns of play.\nIf you expected a trained companion its weights are "
+            + "missing. Looked for:\n  shipped:  "
+            + Path.Combine(Application.streamingAssetsPath, "AI", RoleCompanion + "_policy.json")
+            + "\n            (create with Tools > Training > Export Companion Baseline)\n  your save: "
+            + $"{Path.Combine(Application.persistentDataPath, RoleCompanion + "_policy.json")}");
     }
 
     /// <summary>Force-save every live policy (e.g. on quit).</summary>
@@ -879,7 +1019,16 @@ public class PolicyLearner
     /// </summary>
     public static void NotifyMatchReset()
     {
-        foreach (var kv in sessions) kv.Value.brain.trainer.BeginEpisode();
+        foreach (var kv in sessions)
+        {
+            var s = kv.Value;
+            s.brain.trainer.BeginEpisode();
+            // The warm-start return accumulator is per fighter and must not carry across matches.
+            // Left running, it discounts the previous match's rewards into this one's value target,
+            // so after a few matches the critic is pretrained against a return inflated by everything
+            // that ever happened before it.
+            s.warmStartReturn = 0f;
+        }
     }
 
     /// Credit a match result to a fighter's most recent transition. The per-turn reward is dense but

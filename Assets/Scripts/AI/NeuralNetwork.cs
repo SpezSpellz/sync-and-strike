@@ -84,6 +84,50 @@ public class NeuralNetwork
     private float value;
     private float[] probs;
 
+    // --- Adam optimiser state ---
+    //
+    // First and second moment estimates, one array per parameter tensor, plus a single step counter
+    // shared by all of them (Adam's bias correction is global, not per tensor).
+    //
+    // These are deliberately NOT part of the exported Weights. They are optimiser state describing the
+    // path taken to the current weights, not the weights themselves: shipping a frozen enemy wants the
+    // policy, and resuming a run recreates its own moments from scratch. Persisting them would also
+    // mean every saved file carries two extra copies of the network.
+    private float[] mw1, vw1a, mb1, vb1a, mw2, vw2a, mb2, vb2a;
+    private float[] mwp, vwpa, mbp, vbpa, mwv, vwva, mbv, vbva;
+    private float[] mvw1, vvw1a, mvb1, vvb1a, mvw2, vvw2a, mvb2, vvb2a;
+    private float[] mwmu, vwmu, mbmu, vbmu, mlogSd, vlogSd;
+    private int adamStep;
+
+    /// <summary>Adam steps taken. Exposed so telemetry can tell an untrained network from a stalled one.</summary>
+    public int OptimizerSteps => adamStep;
+
+    /// <summary>Discard the Adam moments, e.g. after importing weights that were trained by a different
+    /// optimiser or a different network. The moments describe the old trajectory, so keeping them would
+    /// push the first few steps in a direction that has nothing to do with the weights now loaded.</summary>
+    public void ResetOptimizerState()
+    {
+        Array.Clear(mw1, 0, mw1.Length); Array.Clear(vw1a, 0, vw1a.Length);
+        Array.Clear(mb1, 0, mb1.Length); Array.Clear(vb1a, 0, vb1a.Length);
+        Array.Clear(mw2, 0, mw2.Length); Array.Clear(vw2a, 0, vw2a.Length);
+        Array.Clear(mb2, 0, mb2.Length); Array.Clear(vb2a, 0, vb2a.Length);
+        Array.Clear(mwp, 0, mwp.Length); Array.Clear(vwpa, 0, vwpa.Length);
+        Array.Clear(mbp, 0, mbp.Length); Array.Clear(vbpa, 0, vbpa.Length);
+        Array.Clear(mwv, 0, mwv.Length); Array.Clear(vwva, 0, vwva.Length);
+        Array.Clear(mbv, 0, mbv.Length); Array.Clear(vbva, 0, vbva.Length);
+        Array.Clear(mvw1, 0, mvw1.Length); Array.Clear(vvw1a, 0, vvw1a.Length);
+        Array.Clear(mvb1, 0, mvb1.Length); Array.Clear(vvb1a, 0, vvb1a.Length);
+        Array.Clear(mvw2, 0, mvw2.Length); Array.Clear(vvw2a, 0, vvw2a.Length);
+        Array.Clear(mvb2, 0, mvb2.Length); Array.Clear(vvb2a, 0, vvb2a.Length);
+        if (mwmu != null)
+        {
+            Array.Clear(mwmu, 0, mwmu.Length); Array.Clear(vwmu, 0, vwmu.Length);
+            Array.Clear(mbmu, 0, mbmu.Length); Array.Clear(vbmu, 0, vbmu.Length);
+            Array.Clear(mlogSd, 0, mlogSd.Length); Array.Clear(vlogSd, 0, vlogSd.Length);
+        }
+        adamStep = 0;
+    }
+
     /// <param name="valueHidden">Width of the critic trunk. 0 (the default) means "same as
     /// <paramref name="hidden"/>", which is what every pre-existing call site meant.</param>
     public NeuralNetwork(int input, int hidden, int actions, int seed = 1234, int scalars = 0,
@@ -144,6 +188,28 @@ public class NeuralNetwork
         // squashed range, because sigmoid(0) = 0.5. A mid-range jump or DI is a legal, harmless
         // default, which is what we want before warm start has cloned anything.
         for (int i = 0; i < (wmu?.Length ?? 0); i++) wmu[i] = (float)(rng.NextDouble() * 2 - 1) * s3;
+
+        // Adam moments: allocated once, zero-initialised. Not filled with noise on purpose - at step 0
+        // both moments are zero, bias correction divides by (1 - beta1^t) and (1 - beta2^t), and the
+        // first update comes out at exactly lr * g regardless of what m and v started as.
+        mw1 = new float[w1.Length]; vw1a = new float[w1.Length];
+        mb1 = new float[b1.Length]; vb1a = new float[b1.Length];
+        mw2 = new float[w2.Length]; vw2a = new float[w2.Length];
+        mb2 = new float[b2.Length]; vb2a = new float[b2.Length];
+        mwp = new float[wp.Length]; vwpa = new float[wp.Length];
+        mbp = new float[bp.Length]; vbpa = new float[bp.Length];
+        mwv = new float[wv.Length]; vwva = new float[wv.Length];
+        mbv = new float[1]; vbva = new float[1];
+        mvw1 = new float[vw1.Length]; vvw1a = new float[vw1.Length];
+        mvb1 = new float[vb1.Length]; vvb1a = new float[vb1.Length];
+        mvw2 = new float[vw2.Length]; vvw2a = new float[vw2.Length];
+        mvb2 = new float[vb2.Length]; vvb2a = new float[vb2.Length];
+        if (scalars > 0)
+        {
+            mwmu = new float[wmu.Length]; vwmu = new float[wmu.Length];
+            mbmu = new float[bmu.Length]; vbmu = new float[bmu.Length];
+            mlogSd = new float[logSd.Length]; vlogSd = new float[logSd.Length];
+        }
     }
 
     public float Forward(float[] x)
@@ -427,7 +493,7 @@ public class NeuralNetwork
     ///     strictly better than applying: a NaN step poisons the weights permanently, whereas a
     ///     skipped step just loses one update.
     /// </summary>
-    public void ApplyGradients(float lr, float maxGradNorm = 0f)
+    public void ApplyGradients(float lr, float maxGradNorm = 0f, int samples = 1, bool useAdam = false)
     {
         if (!GradientsAreFinite())
         {
@@ -435,6 +501,36 @@ public class NeuralNetwork
             // Clear the accumulator so the bad batch cannot contaminate the next one either.
             ClearGradients();
             return;
+        }
+
+        // Normalise the accumulated SUM to a MEAN before clipping, so the norm clip applies to the mean
+        // gradient and the step size is independent of minibatch size.
+        //
+        // This is the bug that kept the policy frozen. The caller passed lr/count while the gradient
+        // arrays hold the SUM over the minibatch, so the clip (norm <= 0.5 on the sum) was divided by
+        // the count a second time. Largest possible per-step change was 0.5 * lr / count ~= 4.7e-6 at
+        // lr=3e-4, count=32. Over a whole run the categorical head moved so little that KL sat at ~1e-6,
+        // clip fraction at 0, entropy stayed at the uniform ln(16)~2.77 and max|weight| did not change
+        // to four decimals. The critic, whose error is far larger, still moved enough to train - which
+        // is why value loss fell while the policy learned nothing.
+        if (samples > 1)
+        {
+            float inv = 1f / samples;
+            for (int i = 0; i < gw1.Length; i++) gw1[i] *= inv;
+            for (int i = 0; i < gb1.Length; i++) gb1[i] *= inv;
+            for (int i = 0; i < gw2.Length; i++) gw2[i] *= inv;
+            for (int i = 0; i < gb2.Length; i++) gb2[i] *= inv;
+            for (int i = 0; i < gwp.Length; i++) gwp[i] *= inv;
+            for (int i = 0; i < gbp.Length; i++) gbp[i] *= inv;
+            for (int i = 0; i < gwv.Length; i++) gwv[i] *= inv;
+            gbv[0] *= inv;
+            for (int i = 0; i < gvw1.Length; i++) gvw1[i] *= inv;
+            for (int i = 0; i < gvb1.Length; i++) gvb1[i] *= inv;
+            for (int i = 0; i < gvw2.Length; i++) gvw2[i] *= inv;
+            for (int i = 0; i < gvb2.Length; i++) gvb2[i] *= inv;
+            for (int i = 0; i < (gwmu?.Length ?? 0); i++) gwmu[i] *= inv;
+            for (int i = 0; i < (gbmu?.Length ?? 0); i++) gbmu[i] *= inv;
+            for (int i = 0; i < (glogSd?.Length ?? 0); i++) glogSd[i] *= inv;
         }
 
         if (maxGradNorm > 0f)
@@ -493,6 +589,16 @@ public class NeuralNetwork
             }
         }
 
+        // Adam path. Adam rescales each parameter by its own gradient magnitude, which is the point: the
+        // critic's error is orders of magnitude larger than the policy gradient, and a single shared
+        // learning rate cannot serve both. Stable-Baselines3 and ML-Agents both default to Adam for PPO.
+        if (useAdam)
+        {
+            AdamStep(lr, 0.9f, 0.999f, 1e-8f);
+            RecomputeMaxWeight();
+            return;
+        }
+
         for (int i = 0; i < w1.Length; i++) w1[i] -= lr * gw1[i];
         for (int i = 0; i < b1.Length; i++) b1[i] -= lr * gb1[i];
         for (int i = 0; i < w2.Length; i++) w2[i] -= lr * gw2[i];
@@ -515,7 +621,7 @@ public class NeuralNetwork
             // (nothing learnable).
             logSd[i] = Mathf.Clamp(logSd[i], ContinuousHead.MinLogSd, ContinuousHead.MaxLogSd);
         }
-        TrackMaxWeight();
+        RecomputeMaxWeight();
     }
 
     /// <summary>True when every accumulated gradient is a finite number.</summary>
@@ -571,8 +677,85 @@ public class NeuralNetwork
     /// </summary>
     public float MaxAbsWeight { get; private set; }
 
-    /// <summary>Recompute <see cref="MaxAbsWeight"/>. Cheap; called once per update.</summary>
-    private void TrackMaxWeight()
+    /// <summary>One Adam step over every parameter tensor.</summary>
+    /// <param name="beta1">Exponential decay for the first moment. 0.9 is the standard.</param>
+    /// <param name="beta2">Exponential decay for the second moment. 0.999 is the standard.</param>
+    /// <param name="eps">Added inside sqrt(v) to keep the very first step finite, when v is still zero.</param>
+    ///
+    /// Bias correction is what makes the first step come out at roughly lr*g instead of zero. Without it
+    /// the moments start at 0, so both estimates start at 0, and the update is silently a fraction of
+    /// the learning rate for the first few dozen steps - the same class of "the policy is not moving"
+    /// bug this project has already hit twice. Correction uses the GLOBAL step count across all
+    /// tensors, which is what the original paper specifies.
+    ///
+    /// logSd is deliberately NOT treated like a weight: it is a scale parameter that is clamped to a
+    /// legal range, and letting Adam's moments accumulate across a clamp boundary would push it back
+    /// out every step. It is stepped with the same rule but re-clamped immediately after.
+    private void AdamStep(float lr, float beta1, float beta2, float eps)
+    {
+        adamStep++;
+        float bc1 = 1f - Mathf.Pow(beta1, adamStep);
+        float bc2 = 1f - Mathf.Pow(beta2, adamStep);
+        float invBc1 = bc1 > 0f ? 1f / bc1 : 1f;
+        float invBc2 = bc2 > 0f ? 1f / bc2 : 1f;
+
+        w1 = AdamUpdate(w1, gw1, mw1, vw1a, beta1, beta2, eps, lr, invBc1, invBc2);
+        b1 = AdamUpdate(b1, gb1, mb1, vb1a, beta1, beta2, eps, lr, invBc1, invBc2);
+        w2 = AdamUpdate(w2, gw2, mw2, vw2a, beta1, beta2, eps, lr, invBc1, invBc2);
+        b2 = AdamUpdate(b2, gb2, mb2, vb2a, beta1, beta2, eps, lr, invBc1, invBc2);
+        wp = AdamUpdate(wp, gwp, mwp, vwpa, beta1, beta2, eps, lr, invBc1, invBc2);
+        bp = AdamUpdate(bp, gbp, mbp, vbpa, beta1, beta2, eps, lr, invBc1, invBc2);
+        wv = AdamUpdate(wv, gwv, mwv, vwva, beta1, beta2, eps, lr, invBc1, invBc2);
+        bv = AdamUpdate(bv, gbv, mbv, vbva, beta1, beta2, eps, lr, invBc1, invBc2);
+        vw1 = AdamUpdate(vw1, gvw1, mvw1, vvw1a, beta1, beta2, eps, lr, invBc1, invBc2);
+        vb1 = AdamUpdate(vb1, gvb1, mvb1, vvb1a, beta1, beta2, eps, lr, invBc1, invBc2);
+        vw2 = AdamUpdate(vw2, gvw2, mvw2, vvw2a, beta1, beta2, eps, lr, invBc1, invBc2);
+        vb2 = AdamUpdate(vb2, gvb2, mvb2, vvb2a, beta1, beta2, eps, lr, invBc1, invBc2);
+        if (wmu != null)
+        {
+            wmu = AdamUpdate(wmu, gwmu, mwmu, vwmu, beta1, beta2, eps, lr, invBc1, invBc2);
+            bmu = AdamUpdate(bmu, gbmu, mbmu, vbmu, beta1, beta2, eps, lr, invBc1, invBc2);
+            logSd = AdamUpdate(logSd, glogSd, mlogSd, vlogSd, beta1, beta2, eps, lr, invBc1, invBc2);
+            for (int i = 0; i < logSd.Length; i++)
+                logSd[i] = Mathf.Clamp(logSd[i], ContinuousHead.MinLogSd, ContinuousHead.MaxLogSd);
+        }
+    }
+
+    /// <summary>Adam on a single tensor. Returns the same array it was given (mutated in place), so the
+    /// call sites read as assignments without allocating per step.</summary>
+    /// <param name="invBc1">1/(1 - beta1^t), the first-moment bias correction.</param>
+    /// <param name="invBc2">1/(1 - beta2^t), the second-moment bias correction.</param>
+    ///
+    /// This is the textbook update written out in full,
+    /// <c>p -= lr * (m*invBc1) / (sqrt(v*invBc2) + eps)</c>, rather than the algebraically equivalent
+    /// "absorb sqrt(1-beta2^t) into the step size" form that most reference code uses.
+    ///
+    /// The absorbed form is shorter and is why this is worth being explicit about: it is very easy to
+    /// absorb that sqrt into the numerator as well as the denominator, which leaves an extra
+    /// <c>sqrt(invBc2)</c> of ~30x on every step - a learning rate that is wrong by a factor of thirty,
+    /// with no error, no NaN and a plausible-looking loss curve. That is exactly what happened the first
+    /// time this was written, and it was caught only because the update is checked against an
+    /// independent reference implementation rather than merely being inspected.
+    private static float[] AdamUpdate(float[] p, float[] g, float[] m, float[] v,
+                                      float beta1, float beta2, float eps, float lr,
+                                      float invBc1, float invBc2)
+    {
+        if (p == null || g == null) return p;
+        for (int i = 0; i < p.Length; i++)
+        {
+            float gi = g[i];
+            m[i] = beta1 * m[i] + (1f - beta1) * gi;
+            v[i] = beta2 * v[i] + (1f - beta2) * gi * gi;
+            float mHat = m[i] * invBc1;
+            float vHat = v[i] * invBc2;
+            p[i] -= lr * mHat / (Mathf.Sqrt(vHat) + eps);
+        }
+        return p;
+    }
+
+    /// <summary>Recompute <see cref="MaxAbsWeight"/>. Cheap; called once per update, and by the weight
+    /// loader so it can reject a file that parses but carries no trained weights at all.</summary>
+    public void RecomputeMaxWeight()
     {
         float m = 0f;
         for (int i = 0; i < w1.Length; i++) { float a = Mathf.Abs(w1[i]); if (a > m) m = a; }

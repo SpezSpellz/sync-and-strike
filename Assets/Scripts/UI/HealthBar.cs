@@ -39,6 +39,25 @@ public class HealthBar : MonoBehaviour
     }
 
     /// <summary>
+    /// Re-point this bar at a different fighter without disturbing its layout.
+    ///
+    /// Needed by training, where the fighters that actually fight are clones spawned by
+    /// TrainingArenaBuilder while the HUD bars are scene objects holding SERIALIZED references to the
+    /// original fighters. Those originals are deactivated by DeactivateSceneFighters, so a bar left
+    /// pointing at one keeps reading an untouched CharacterData and sits at full forever. The companion
+    /// bar was unaffected only because CompanionHealthBarUI re-resolves through TurnManager every frame
+    /// until it binds.
+    ///
+    /// Exposed separately from <see cref="Bind"/> so a caller that owns the layout (a cloned bar) can
+    /// re-target it repeatedly without also re-resolving its data reference.
+    /// </summary>
+    public void Rebind(CharacterController fighter)
+    {
+        if (fighter == null) return;
+        Bind(fighter);
+    }
+
+    /// <summary>
     /// Points this bar at a fighter. This overwrites any previously assigned data, which matters
     /// for cloned bars: they inherit the source bar's serialized reference and would otherwise
     /// keep tracking the original fighter.

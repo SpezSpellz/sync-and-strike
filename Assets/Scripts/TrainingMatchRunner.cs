@@ -218,6 +218,10 @@ public class TrainingMatchRunner : MonoBehaviour
         yield return null;
 
         WireArenas();
+
+        // After WireArenas, not before: the bars can only be pointed at fighters that already exist, and
+        // the arena clones are created by BuildArenas above.
+        RebindHudToArenaFighters();
     }
 
     /// <summary>Phase 1: create the arena roots, their managers, the stage and the two fighters.</summary>
@@ -325,6 +329,66 @@ public class TrainingMatchRunner : MonoBehaviour
         }
         foreach (var cam in FindObjectsByType<CameraFollow>(FindObjectsSortMode.None))
             cam.enabled = false;
+    }
+
+    /// <summary>
+    /// Point the HUD health bars at the fighters that are actually fighting.
+    ///
+    /// The bars are scene objects with SERIALIZED owner references to the original player and enemy,
+    /// and the fighters that fight are clones spawned per arena. Once the originals are deactivated the
+    /// bars keep reading their untouched CharacterData and stay full, so only the companion's bar moved -
+    /// it is the one bar that re-resolves through TurnManager at runtime. This is presentation only: it
+    /// has no effect on damage, rewards or telemetry.
+    ///
+    /// Matched by TEAM rather than by slot, because there is no single "the" player fighter once arenas
+    /// exist. The team is read from the bar's CURRENT owner, which is still the original fighter at this
+    /// point - that is the whole reason we can tell which bar is which. Where no owner is set the bar's
+    /// name is used as a fallback.
+    /// </summary>
+    private void RebindHudToArenaFighters()
+    {
+        var bars = FindObjectsByType<HealthBar>(FindObjectsSortMode.None);
+        if (bars.Length == 0) return;
+
+        foreach (var bar in bars)
+        {
+            // The companion bar is deliberately left alone: CompanionHealthBarUI resolves it through
+            // TurnManager and re-binds on its own schedule, and stomping it here would race that.
+            if (bar.Owner != null && bar.Owner.Team == CombatTeam.Companion) continue;
+
+            CombatTeam team;
+            if (bar.Owner != null) team = bar.Owner.Team;
+            else if (bar.transform.parent != null && bar.name.IndexOf("Enemy", StringComparison.OrdinalIgnoreCase) >= 0)
+                team = CombatTeam.Enemy;
+            else team = CombatTeam.Player;
+
+            var fighter = LatestArenaFighter(team);
+            if (fighter != null) bar.Bind(fighter);
+        }
+    }
+
+    /// <summary>
+    /// A fighter on the given team belonging to an arena, choosing the lowest instance id so the choice
+    /// is STABLE across calls.
+    ///
+    /// Stability matters more than recency here. A single HUD bar cannot represent N simultaneous
+    /// arenas, so this deliberately picks one deterministically instead of following whichever arena
+    /// happened to act last - a bar that jumped between arenas every turn would be unreadable. The
+    /// consequence is that the HUD shows one arena's fighters while the others run unwatched; the
+    /// training CSV remains the per-arena record.
+    /// </summary>
+    private CharacterController LatestArenaFighter(CombatTeam team)
+    {
+        CharacterController best = null;
+        int bestKey = int.MaxValue;
+        foreach (var f in FindObjectsByType<CharacterController>(FindObjectsSortMode.None))
+        {
+            if (f == null || f.GetComponentInParent<Arena>() == null) continue;
+            if (f.Data == null || f.Data.team != team) continue;
+            int key = f.GetInstanceID();
+            if (key < bestKey) { best = f; bestKey = key; }
+        }
+        return best;
     }
 
     /// <summary>
@@ -475,19 +539,54 @@ public class TrainingMatchRunner : MonoBehaviour
         // policy that stalls makes frames-per-turn balloon, which moves the second number without moving
         // the first.
         float elapsed = Time.realtimeSinceStartup - runStartTime;
-        int totalTurns = 0, totalFrames = 0;
-        foreach (var r in runs) { totalTurns += r.turns; totalFrames += r.framesLastMatch; }
-        float turnsPerSec = elapsed > 0.01f ? totalTurns / elapsed : 0f;
-        float framesPerSec = elapsed > 0.01f ? totalFrames / elapsed : 0f;
+        // Both throughput rates must come from MONOTONIC counters, differenced over the sample span.
+        //
+        // The previous version summed run.turns, which is the CURRENT match's turn count and is reset
+        // to 0 on every FinishMatch. Dividing that by TOTAL elapsed time produced a number with no
+        // units: it read 0.04-1.45 turns/s while the run was actually completing ~75, and
+        // avgFramesPerTurn then divided a cumulative frame counter by it, manufacturing the impossible
+        // 5,000-100,000 frames/turn readings. The CSV's per-turn frame count was always 26-36.
+        long simFramesTotal = 0, turnsTotal = 0;
+        foreach (var r in runs)
+        {
+            simFramesTotal += r.arena.TurnManager.TotalSimFrames;
+            turnsTotal += r.arena.TurnManager.TotalTurns;
+        }
+        float turnsPerSec = 0f, framesPerSec = 0f;
+        float sampleSpan = elapsed - lastSampleElapsed;
+        if (sampleSpan > 0.01f)
+        {
+            turnsPerSec = (float)(turnsTotal - turnsAtLastSample) / sampleSpan;
+            framesPerSec = (float)(simFramesTotal - simFramesAtLastSample) / sampleSpan;
+        }
+        simFramesAtLastSample = simFramesTotal;
+        turnsAtLastSample = turnsTotal;
+        lastSampleElapsed = elapsed;
+        // Now meaningful: both sides are cumulative, so this is the true average simulation frames a
+        // turn costs. It is the number that distinguishes a stalled turn (pinned at maxTurnFrames)
+        // from a genuinely cheap one.
+        avgFramesPerTurn = turnsTotal > 0 ? (float)simFramesTotal / turnsTotal : 0f;
 
+        // avgFramesPerTurn separates "few turns, each expensive" from "many turns, each cheap".
+        // Without it a low turns/s is ambiguous: the turn count alone cannot distinguish a policy that
+        // stalls (turns hit the frame cap) from a genuinely slow simulation, and those need opposite fixes.
         Debug.Log($"[Training] heartbeat: {totalMatches} matches done, arena0 at turn {run.turns}, "
             + $"phase={run.arena.TurnManager.Phase} "
             + $"[{elapsed:0}s {turnsPerSec:0.00} turns/s {framesPerSec:0} simframes/s "
+            + $"{avgFramesPerTurn:0.0} frames/turn "
             + $"({runs.Count} arenas, {appliedOverrides.Count} overrides)]{state}");
     }
 
     private float heartbeatTimer;
     private float runStartTime;
+
+    // Baseline for the differenced throughput rate. Storing the previous counter value and elapsed time,
+    // rather than dividing by total elapsed, keeps the reported rate describing the CURRENT rate instead
+    // of a running average that can only ever lag.
+    private long simFramesAtLastSample;
+    private long turnsAtLastSample;
+    private float lastSampleElapsed;
+    private float avgFramesPerTurn;
 
     /// <summary>
     /// Stop a bounded run once it has hit <c>-maxMatches</c> or <c>-maxSeconds</c>.
@@ -604,7 +703,10 @@ public class TrainingMatchRunner : MonoBehaviour
                 $"clip={kv.Value.clipFraction:0.###} vloss={kv.Value.valueLoss:0.###} " +
                 $"|A|={kv.Value.advantageMagnitude:0.###} rejected={kv.Value.rejected} "
                 + $"nonfinite={kv.Value.nonfinite} clipped={kv.Value.clippedSteps}/{kv.Value.clippedCriticSteps} vStd={kv.Value.valueStd:F2} rStd={kv.Value.returnStd:F2} corr={kv.Value.valueReturnCorr:F2} chained={kv.Value.chainedFraction:F3}"
-                + $"w|max|={kv.Value.maxAbsWeight:0.#}"
+                // mb= counts gradient steps ACTUALLY applied. Under Adam that is what sets how far the
+                // policy can move in one update (~mb*lr), so when the KL overshoots this is the number to
+                // read before touching the epoch count: fewer minibatches means the STEP SIZE is at fault.
+                + $"w|max|={kv.Value.maxAbsWeight:0.###} ep={kv.Value.epochsRun}/{kv.Value.minibatchesRun}mb klAll={kv.Value.klAll:0.####}"
                 + (kv.Value.poisoned ? " POISONED" : ""));
         }
         if (lines.Count == 0) return;

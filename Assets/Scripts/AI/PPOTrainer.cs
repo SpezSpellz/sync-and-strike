@@ -47,7 +47,27 @@ public class PPOTrainer
     [Serializable]
     public class Hyper
     {
-        public float learningRate = 3e-4f;
+        /// <summary>
+    /// Learning rate. 3e-5, NOT the 3e-4 that was here before Adam.
+    ///
+    /// The reason is a step-count fact that is easy to miss. With Adam every parameter moves about
+    /// <c>lr</c> per MINIBATCH step, regardless of how large its gradient is. A 2048 batch at
+    /// minibatch 64 is 32 steps per epoch, so one epoch's displacement is roughly
+    /// <c>epochs x (batch/minibatch) x lr</c> = <c>4 x 32 x lr</c>. At 3e-4 that is 0.038 - against
+    /// weights whose magnitude is about 0.29. The policy was being thrown ~13% of its own scale every
+    /// single update.
+    ///
+    /// Measured consequence: approximate KL had a median of 404 and peaked at 3555 against a target of
+    /// 0.015, the KL early stop fired on every single update, clip fraction sat at 0.35, and the network
+    /// grew from max|weight| 0.29 to 0.52. Every advantage the policy learned was computed against a
+    /// distribution it had already left, so the reward signal was noise.
+    ///
+    /// 3e-5 puts a full update's displacement near 4e-3, roughly 1% of the weight scale: large enough
+    /// to make progress over a few hundred updates, small enough that a single batch cannot wreck the
+    /// policy. Adam's scale invariance is what makes this safe - the exact value matters far less than
+    /// it would with SGD, because Adam is already rescaling per parameter.
+    /// </summary>
+    public float learningRate = 3e-5f;
         public float gamma = 0.99f;
         public float lambda = 0.95f;
 
@@ -67,11 +87,77 @@ public class PPOTrainer
     /// variance reduction it needs.</summary>
     public float valueLambda = 1f;
         public float clipEpsilon = 0.2f;
-        public float valueCoef = 0.5f;
+
+    /// <summary>
+    /// Weight on the critic's regression loss, relative to the policy's surrogate.
+    ///
+    /// Halved from 0.5. With the gradient step now correctly scaled, the critic had room to move for the
+    /// first time - and immediately ran away with it: return std ~98 against a value std of 6,
+    /// value/return correlation -0.90, advantages reaching 1e31 and 672 non-finite gradient steps. The
+    /// critic's error is much larger in magnitude than the policy's gradient, so at equal weight it
+    /// dominates the shared trunk far sooner than the policy does.
+    /// </summary>
+    public float valueCoef = 0.25f;
         public float entropyCoef = 0.01f;
         public int epochs = 4;
-        public int minibatch = 32;
-        public int bufferSize = 512;
+
+    /// <summary>
+    /// Minibatch size for the gradient steps. 64 is what PPO implementations settle on for a batch this
+    /// size (RL Baselines3 defaults: 2048 transitions collected, 64 per minibatch). It was 32, which
+    /// doubled the number of very noisy steps per update for no benefit.
+    /// </summary>
+    public int minibatch = 64;
+
+    /// <summary>
+    /// Stop the epochs early once the approximate KL passes this. 0 disables.
+    ///
+    /// The clipped surrogate bounds how far a SINGLE sample may be pushed, not how far the policy as a
+    /// whole moves: with several epochs over many minibatches the same batch is revisited repeatedly and
+    /// the policy can end up well outside the trust region the clipping assumed. Early stopping on KL is
+    /// the standard remedy and it is self-limiting, so the step size and the epoch count no longer have
+    /// to be tuned against each other. With the gradient step now correctly scaled this is what keeps an
+    /// aggressive setting from overshooting on the very first update.
+    /// </summary>
+    public float targetKl = 0.015f;
+
+    /// <summary>
+    /// Use Adam instead of plain SGD.
+    ///
+    /// SGD was the historical choice here because the network was tiny and untrained; with the step
+    /// finally scaled correctly, SGD's weakness shows: a single learning rate has to serve parameters
+    /// whose gradients differ by orders of magnitude (the value error is far larger than the policy
+    /// gradient), so the critic converges and the policy crawls. Adam rescales each parameter by its
+    /// own gradient magnitude, which is the standard PPO optimiser (Stable-Baselines3 and ML-Agents
+    /// both default to it).
+    ///
+    /// Turning it off falls back to the previous SGD path, which is what the gradient harness checks,
+    /// so the two can be compared without either becoming untestable.
+    /// </summary>
+    public bool useAdam = true;
+
+    /// <summary>Adam epsilon, inside sqrt(v). Guards the 1/(sqrt(v)+eps) division at the first step,
+    /// when v is still zero and the update would otherwise be undefined.</summary>
+    public float adamEpsilon = 1e-8f;
+
+    /// <summary>Transitions to collect before an update runs. The batch is DISCARDED afterwards.
+    ///
+    /// This is the standard PPO arrangement: collect N experiences, take a few gradient passes over
+    /// them, throw them away, collect again.
+    ///
+    /// It used to update whenever the buffer merely held `minibatch` (32) entries and never cleared
+    /// it, so once past the threshold EVERY turn ran a full update - 4 epochs over the whole buffer,
+    /// about 64 forward+backward passes per turn - retraining the same transitions over and over. That
+    /// is roughly twenty times the intended gradient work per sample, and it is why throughput fell
+    /// off a cliff the moment the buffer filled: turns 1-32 ran with no PPO work at all and managed
+    /// ~12 turns/s, then every subsequent turn paid for a full update and the rate collapsed to ~1.
+    ///
+    /// Separating the two also fixes the importance-ratio staleness that came with reusing old samples:
+    /// ratios are only meaningful against the policy that collected them.</summary>
+    public int batchSize = 2048;
+
+    /// <summary>Hard cap on buffered transitions. Should exceed <see cref="batchSize"/>; it exists only
+    /// so a run that somehow overshoots cannot grow the buffer without bound.</summary>
+    public int bufferSize = 4096;
 
         /// <summary>
         /// Global-norm clip on the accumulated gradient. 0 disables it.
@@ -99,6 +185,20 @@ public class PPOTrainer
 
     public int Buffered => buffer.Count;
     public int UpdateCount { get; private set; }
+
+    /// <summary>Epochs actually run in the last update. Below <see cref="Hyper.epochs"/> means the
+    /// KL early stop fired, which is the intended behaviour and not a fault.</summary>
+    public int EpochsRun { get; private set; }
+
+    /// <summary>Gradient steps actually applied in the last update. This is the number that governs how
+    /// far the policy can move in one update (roughly MinibatchesRun * lr under Adam), so it is the one
+    /// to watch when the KL overshoots: fewer steps taken means the step size, not the epoch count, is
+    /// what needs reducing.</summary>
+    public int MinibatchesRun { get; private set; }
+
+    /// <summary>Mean approximate KL across all epochs of the last update, i.e. how far the policy
+    /// actually moved. This is the number to compare against <see cref="Hyper.targetKl"/>.</summary>
+    public float MeanKlAcrossEpochs { get; private set; }
 
     // --- Update diagnostics --------------------------------------------------
     //
@@ -239,7 +339,9 @@ public class PPOTrainer
         if (buffer.Count > 0) buffer[buffer.Count - 1].reward += delta;
     }
 
-    public bool ReadyToUpdate() => buffer.Count >= hyper.minibatch;
+    /// <summary>True once a full batch has been collected. Gates the update so the cost per turn is
+    /// proportional to samples collected rather than to turns elapsed.</summary>
+    public bool ReadyToUpdate() => buffer.Count >= hyper.batchSize;
 
     /// <summary>
     /// Epoch counter, stamped onto every transition.
@@ -266,7 +368,8 @@ public class PPOTrainer
         int n = buffer.Count;
         if (n < 2) return;
 
-        UpdateCount++;
+        // Counted at the top, once per call that actually does work. The increment at the end of the
+        // method covers the same event, so having both would double-count.
 
         // --- GAE advantages ---
         var advantage = new float[n];
@@ -422,16 +525,24 @@ public class PPOTrainer
         for (int t = 0; t < n; t++) advantage[t] = (advantage[t] - mean) / std;
 
         // --- Clipped PPO epochs ---
+        // klAllSum/klAllCount accumulate Schulman's low-variance KL across EVERY epoch, which is what
+        // the early-stop check needs. ApproxKl below deliberately reports epoch 0 only, because that is
+        // the KL the update actually started from; averaging later epochs in would report a number the
+        // update never had.
+        float klAllSum = 0f, klAllCount = 0f;
         float klSum = 0f, sampleTotal = 0f, clippedCount = 0f;
         float valueLossSum = 0f, policyLossSum = 0f;
         int minibatchCount = 0;
+        EpochsRun = 0;
+        MinibatchesRun = 0;
 
         // Scalar-head scratch, allocated once per update. Sized from the network, so a move-only network
         // gets zero-length buffers and the scalar path costs nothing.
         var heads = HeadsFor(net.ScalarCount);
         var dMuBuf = new float[net.ScalarCount];
         var dLogSdBuf = new float[net.ScalarCount];
-        for (int epoch = 0; epoch < hyper.epochs; epoch++)
+        bool stopAll = false;
+        for (int epoch = 0; epoch < hyper.epochs && !stopAll; epoch++)
         {
             Shuffle(n);
             for (int start = 0; start < n; start += hyper.minibatch)
@@ -470,6 +581,8 @@ public class PPOTrainer
                         // Schulman's low-variance KL estimator: ratio is exp(newLogProb - oldLogProb).
                         klSum += ratio - 1f - (newLogProb - tr.logProb);
                     }
+                    klAllSum += ratio - 1f - (newLogProb - tr.logProb);
+                    klAllCount++;
 
                     float dLogProb = useClipped ? 0f : A * ratio;
                     float dValue = hyper.valueCoef * (value - returns[i]);
@@ -507,15 +620,63 @@ public class PPOTrainer
                     policyLossSum += batchPolicyLoss / count;
                     minibatchCount++;
                 }
-                net.ApplyGradients(hyper.learningRate / count, hyper.maxGradNorm);
+                // Pass the raw learning rate and let ApplyGradients normalise the accumulated SUM to a
+                // MEAN before it clips. Dividing the lr by count here instead (the previous form) made
+                // the gradient-norm clip apply to the sum and then divided it by count a second time,
+                // shrinking every step by a further factor of `count` and tying step size to minibatch
+                // size. That is why the policy never moved (KL ~1e-6, clip 0, entropy at uniform).
+                net.ApplyGradients(hyper.learningRate, hyper.maxGradNorm, count, hyper.useAdam);
+                MinibatchesRun++;
+                EpochsRun = epoch + 1;
+
+                // KL early stop, checked after EVERY MINIBATCH rather than once per epoch.
+                //
+                // One epoch is (batch/minibatch) gradient steps - 32 of them at the current settings -
+                // and with Adam each moves every parameter by ~lr. Checking only at the epoch boundary
+                // lets the policy be thrown 32 steps past the trust region before anything reacts, which
+                // is exactly how the previous run reached a median KL of 404: the stop DID fire, but only
+                // after the epoch had already done the damage. Checked here, the worst case is one step.
+                //
+                // The gradients for the minibatch that tripped this have already been applied, on
+                // purpose. Discarding them instead would make the number of steps actually taken depend
+                // on where the check happened to land, which is a worse failure than overshooting by one
+                // step: it would make the update non-reproducible.
+                //
+                // The floor of 16 samples keeps the estimate from tripping on the first few samples of the
+                // first minibatch, where the running mean is dominated by a couple of outliers.
+                if (hyper.targetKl > 0f && klAllCount >= 16f
+                    && klAllSum / klAllCount > hyper.targetKl)
+                {
+                    stopAll = true;
+                    break;
+                }
             }
         }
+
+        MeanKlAcrossEpochs = klAllCount > 0f ? klAllSum / klAllCount : 0f;
 
         ApproxKl = sampleTotal > 0f ? klSum / sampleTotal : 0f;
         ClipFraction = sampleTotal > 0f ? clippedCount / sampleTotal : 0f;
         MinibatchCount = minibatchCount;
         ValueLoss = minibatchCount > 0 ? valueLossSum / minibatchCount : 0f;
         PolicyLoss = minibatchCount > 0 ? policyLossSum / minibatchCount : 0f;
+
+        // Discard the batch now that it has been trained on.
+        //
+        // This is what makes the update cost proportional to samples COLLECTED rather than to turns
+        // elapsed. It also restores a property PPO depends on and that reuse quietly destroyed: the
+        // importance ratio is only meaningful against the policy that generated the sample. Once the
+        // policy has moved, a ratio computed against the old log-prob is comparing against a policy
+        // that no longer exists, and the clipping guarantee quietly stops meaning anything.
+        //
+        // Safe with a shared 2v1 brain: GAE groups by (agentId, episode), never by buffer position, so
+        // discarding the batch cannot cut a trajectory. It does mean the sliding-window trim on Add
+        // normally never fires, which is why bufferSize is now a safety cap rather than the working set.
+        buffer.Clear();
+
+        // Number of full batches trained on. Lets telemetry show updates-per-turn directly, which is the
+        // number that collapsed before: one per turn instead of one per batch.
+        UpdateCount++;
     }
 
     // Range descriptors for the scalar heads, shared by index with NeuralPolicy. Kept here so the

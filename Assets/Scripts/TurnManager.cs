@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -41,6 +41,18 @@ public class TurnManager : MonoBehaviour
 
     [Tooltip("Hard cap on how many frames a single turn may simulate before it is force-resolved.")]
     private int maxTurnFrames = 180;
+
+    /// <summary>Simulation frames stepped during the current Unity frame, across all phases.</summary>
+    public int SimFramesThisFrame { get; private set; }
+
+    /// <summary>Total simulation frames stepped since this manager was created. Monotonic, unlike any
+    /// per-match figure, so it can be differenced to get a real frames/second rate.</summary>
+    public long TotalSimFrames { get; private set; }
+
+    /// <summary>Total turns resolved since this manager was created. Monotonic for the same reason as
+    /// <see cref="TotalSimFrames"/>, and the only correct basis for a turns/second rate: the per-match
+    /// counter is reset on every match end, so dividing it by total elapsed time has no meaning.</summary>
+    public long TotalTurns { get; private set; }
 
     [Tooltip("Backstop: resume the turn if the rating prompt has not resolved by now.")]
     private float maxVoteWaitSeconds = 30f;
@@ -230,6 +242,10 @@ public class TurnManager : MonoBehaviour
 
     private void Update()
     {
+        // Reset per-frame before any stepping, so a reader sampling this after Update() sees the whole
+        // frame's work rather than the tail of it.
+        SimFramesThisFrame = 0;
+
         UpdateVoteTimeout();
         switch(Phase)
         {
@@ -252,10 +268,53 @@ public class TurnManager : MonoBehaviour
                     // bound under load and every arena would fall progressively further behind real time.
                     // Dropping it means a frame that overruns its budget simply simulates less, which is
                     // the correct trade for a throughput run.
-                    ticksAwaiting += Time.deltaTime;
-                    int stepsWanted = Mathf.CeilToInt(ticksAwaiting / LOCAL_SECONDS_PER_FRAME);
-                    ticksAwaiting = 0f;
-                    int steps = Mathf.Min(stepsWanted, budget);
+                    // In normal play, simulated time tracks REAL time: a 16.7ms Unity frame buys one 1/60s
+                    // step, so the game runs at real speed regardless of frame rate.
+                    //
+                    // In training that coupling is exactly wrong. It ties simulated time to wall-clock
+                    // time, so throughput is capped near 1x no matter how high maxSimFramesPerUnityFrame
+                    // is set - measured 1.04 turns/s against a budget of 64 that was never even reached,
+                    // because a 16.7ms frame only ever asks for ~17 steps at a 1ms timestep. Raising
+                    // -simFrames could not have helped; the accumulator, not the budget, was binding.
+                    //
+                    // Training therefore runs a FULL budget every Unity frame. Simulated time advances as
+                    // fast as the CPU allows rather than in step with the wall clock, which is what makes
+                    // multi-arena throughput runs possible at all. The physics the policies learn is
+                    // affected in the same way -simSpeed already affects it, which is why that is also
+                    // documented as training-only.
+                    int steps;
+                    if (TrainingMode.enabled)
+                    {
+                        ticksAwaiting = 0f;
+                        steps = budget;
+                    }
+                    else
+                    {
+                        // A real-time accumulator: keep the REMAINDER instead of discarding it, and round
+                        // DOWN rather than up.
+                        //
+                        // Both details are load-bearing, and together they are why the game ran fast
+                        // whenever it was not vSync-locked to 60.
+                        //
+                        // CeilToInt with the accumulator zeroed meant any frame shorter than 1/60s still
+                        // bought a WHOLE step. That is correct at exactly 60fps and wrong at every other
+                        // rate: on a machine rendering at 200fps, deltaTime is 5ms, 5ms/16.7ms rounds up
+                        // to 1 step, and the game therefore simulates 200 steps per second instead of 60 -
+                        // over three times real speed. Discarding the leftover time made the surplus
+                        // unrecoverable, so the error accumulated every single frame and could never
+                        // correct itself.
+                        //
+                        // Keeping the remainder lets a faster machine take two steps on the frames that
+                        // are long enough, and lets a slower one fall behind by a fraction of a step at
+                        // most. Rounding down (never up) guarantees the simulation never runs ahead of
+                        // the wall clock, which is the direction that looks like a bug to the player.
+                        ticksAwaiting += Time.deltaTime;
+                        int stepsWanted = Mathf.FloorToInt(ticksAwaiting / LOCAL_SECONDS_PER_FRAME);
+                        ticksAwaiting -= stepsWanted * LOCAL_SECONDS_PER_FRAME;
+                        // Only when there is genuinely time banked. Forcing a minimum of 1 here would
+                        // reintroduce the run-fast bug at high frame rates.
+                        steps = Mathf.Min(stepsWanted, budget);
+                    }
 
                     while (steps-- > 0)
                     {
@@ -264,7 +323,21 @@ public class TurnManager : MonoBehaviour
                         {
                             if (completedCount < totalPlayers) WarnUnfinishedFighters();
                             ResolveTurn();
-                            break;
+                            // ResolveTurn runs the whole hand-off synchronously: for AI fighters its tail
+                            // BeginPlanning calls RequestDecision -> SubmitMove -> ExecuteMove, which
+                            // leaves Phase back in Simulating with a fresh turn already assembled. So the
+                            // remaining budget can be spent on the NEXT turn.
+                            //
+                            // The unconditional break that used to sit here threw that budget away and
+                            // pinned throughput to one turn per rendered frame regardless of -simFrames:
+                            // measured ~4,576 simframes/s against a 64-frame budget (≈71 rendered fps) is
+                            // exactly one 50-frame turn per frame, i.e. ~75 turns/s with 95% of the budget
+                            // unused. Continuing is what lets one Unity frame simulate many turns.
+                            //
+                            // Guarded on Phase rather than assumed, because a turn can also end in
+                            // AwaitingVote (not in training) or be left unresolved if a fighter never
+                            // submitted; in those cases stepping further would run the sim outside a turn.
+                            if (Phase != TurnPhase.Simulating) break;
                         }
                         foreach (var player_turn_data in players.getList())
                         {
@@ -272,6 +345,8 @@ public class TurnManager : MonoBehaviour
                         }
                         Hitbox.Step();
                         framesThisTurn++;
+                        SimFramesThisFrame++;
+                        TotalSimFrames++;
                     }
                     break;
                 }
@@ -309,6 +384,7 @@ public class TurnManager : MonoBehaviour
         if (Phase != TurnPhase.Simulating) return;
         Phase = TurnPhase.Resolved;
         FramesLastTurn = framesThisTurn;
+        TotalTurns++;
 
         // Everything from here to the single BeginPlanning at the tail runs with this set, so a
         // ResetState() from a TurnResolved handler cannot start a second planning phase.

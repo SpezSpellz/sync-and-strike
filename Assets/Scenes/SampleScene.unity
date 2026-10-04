@@ -734,6 +734,7 @@ MonoBehaviour:
   - {fileID: 1460777063}
   - {fileID: 730304477}
   - {fileID: 174946279}
+  Arena: {fileID: 0}
 --- !u!114 &193890367
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -986,6 +987,7 @@ MonoBehaviour:
     allyBuffer: 1.6
   seed: 12345
   target: {fileID: 1956807353}
+  useTrainedPolicy: 0
 --- !u!114 &244021964
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1004,6 +1006,89 @@ MonoBehaviour:
   worldHeight: 1.15
   rectWidth: 140
   hideWhenDead: 1
+--- !u!1 &317423676
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 317423679}
+  - component: {fileID: 317423678}
+  - component: {fileID: 317423677}
+  m_Layer: 0
+  m_Name: TrainingRig
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &317423677
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 317423676}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6355790e987d6b547889b440f6266934, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TrainingMatchRunner
+  arenaCount: 1
+  maxMatchTurns: 400
+  winBonus: 20
+  lossPenalty: -20
+  reportEvery: 1
+  parameterOverrideArg: 
+  heartbeatSeconds: 2
+  deactivateSceneFighters: 1
+--- !u!114 &317423678
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 317423676}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 545afd86155b5e042a10773a89471268, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TrainingArenaBuilder
+  arenaSpacing: 30
+  floorY: -1.19
+  ceilingY: 7.41
+  wallX: 11.76
+  stageWidth: 25.02
+  floorThickness: 0.2
+  ceilingThickness: 1
+  wallThickness: 1.51
+  fighterHealth: 100
+  fighterWidth: 0.5
+  fighterHeight: 0.7
+  fighterRenderScale: 3
+  startSeparation: 2.5
+  companionStandoff: 1.7
+  renderFighters: 1
+  renderArenaIndex: 0
+  fighterPrefab: {fileID: 0}
+  enemy: {fileID: 0}
+--- !u!4 &317423679
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 317423676}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &456793175
 GameObject:
   m_ObjectHideFlags: 0
@@ -1769,6 +1854,7 @@ MonoBehaviour:
   - {fileID: 1460777063}
   - {fileID: 730304477}
   - {fileID: 174946279}
+  Arena: {fileID: 0}
 --- !u!114 &859419287
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2017,6 +2103,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a79adeab93acca349bffb8dcc20d9c59, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CompanionVoteManager
+  Arena: {fileID: 0}
 --- !u!1 &981119223
 GameObject:
   m_ObjectHideFlags: 0
@@ -2309,6 +2396,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 31bedc51c6b4bd04da3056df0d39fccc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TurnManager
+  Arena: {fileID: 0}
   fastForward: 0
   defaultTurnDuration: 20
 --- !u!114 &1129062768
@@ -2323,6 +2411,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3f901a1bb1d7e6d4484f895d91008fe2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PhysicsManager
+  Arena: {fileID: 0}
 --- !u!114 &1129062769
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2337,6 +2426,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::HitboxManager
   hitboxPrefab: {fileID: 5716490138129443718, guid: 669a28518fd19b347ba59d27bcdea055, type: 3}
   showHitboxes: 0
+  Arena: {fileID: 0}
 --- !u!114 &1129062770
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2349,6 +2439,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e5cb07bac9f68ff4abd78bf18e86d7f2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PreviewPhysicsManager
+  Arena: {fileID: 0}
 --- !u!114 &1129062771
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2361,6 +2452,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 06805f69ac599d44a92d5aa5f0ad2cc8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PreviewManager
+  Arena: {fileID: 0}
 --- !u!114 &1129062772
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2373,6 +2465,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ef8cd77a878acef43b805176e03458bd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PreviewHitboxManager
+  Arena: {fileID: 0}
 --- !u!1 &1169256737
 GameObject:
   m_ObjectHideFlags: 0
@@ -3338,6 +3431,7 @@ MonoBehaviour:
   - {fileID: 1460777063}
   - {fileID: 730304477}
   - {fileID: 174946279}
+  Arena: {fileID: 0}
 --- !u!114 &1773039104
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4005,3 +4099,4 @@ SceneRoots:
   - {fileID: 1956807344}
   - {fileID: 244021960}
   - {fileID: 584489104}
+  - {fileID: 317423679}

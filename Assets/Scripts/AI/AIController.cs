@@ -119,7 +119,25 @@ public abstract class AIController : CharacterController
     {
         if (IsDead())
         {
-            TurnMgr.ResetState();
+            // Outside training this is the round-reset path: TurnManager.ResetState reloads every
+            // fighter's start-of-match SaveData, and this was its ONLY caller apart from the training
+            // match runner, so removing it outright would leave a dead AI standing in the shipped game.
+            //
+            // In training the match runner owns match boundaries, and that reset is actively wrong: it
+            // fires on an ally death too, reloading BOTH sides to full health and start positions mid-
+            // match. The match then could not end on a team wipe and could only reach the maxMatchTurns
+            // cap, and the reset re-entered BeginPlanning from inside ResolveTurn's own BeginPlanning
+            // (RequestDecision -> ResetState -> BeginPlanning) until the health came back. Here a dead
+            // fighter just submits the no-op, which is all the turn loop needs to keep advancing.
+            if (!TrainingMode.enabled)
+            {
+                TurnMgr.ResetState();
+                return;
+            }
+
+            SelectMove("idle");
+            LastSubmittedMove = SelectedMove;
+            TurnMgr.SubmitMove(this);
             return;
         }
 
