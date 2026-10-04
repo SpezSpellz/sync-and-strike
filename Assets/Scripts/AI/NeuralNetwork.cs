@@ -23,6 +23,10 @@ public class NeuralNetwork
     public class Weights
     {
         public int input, hidden, actions;
+
+        /// <summary>Width of the critic's own trunk. Separate from hidden because the two heads want
+        /// different capacity; 0 in files written before the widths diverged.</summary>
+        public int valueHidden;
         public float[] w1, b1, w2, b2, wp, bp, wv, bv;
 
         /// <summary>Continuous-head output weights and biases, plus the state-independent log-sd per
@@ -37,6 +41,16 @@ public class NeuralNetwork
     public int InputSize { get; }
     public int HiddenSize { get; }
     public int ActionCount { get; }
+
+    /// <summary>Width of the critic trunk, independent of <see cref="HiddenSize"/>.
+    ///
+    /// The critic has to integrate a reward stream over a ~100-turn effective horizon
+    /// (gamma 0.99) and resolve small differences in expected outcome, while the policy mostly needs
+    /// to rank discrete actions. Sizing them the same forced the critic to be the smaller of the two,
+    /// and explained variance sat at ~0 - the critic merely matching a constant. Widening only the
+    /// critic is cheap: it does not run on the inference path for the shipped enemy, where the frozen
+    /// policy never asks for a value.</summary>
+    public int ValueHiddenSize { get; }
 
     /// <summary>How many scalar (Gaussian) outputs this network has. Zero for the old
     /// move-only shape, which keeps Export/Import able to read files written before this existed.</summary>
@@ -70,26 +84,32 @@ public class NeuralNetwork
     private float value;
     private float[] probs;
 
-    public NeuralNetwork(int input, int hidden, int actions, int seed = 1234, int scalars = 0)
+    /// <param name="valueHidden">Width of the critic trunk. 0 (the default) means "same as
+    /// <paramref name="hidden"/>", which is what every pre-existing call site meant.</param>
+    public NeuralNetwork(int input, int hidden, int actions, int seed = 1234, int scalars = 0,
+                         int valueHidden = 0)
     {
         InputSize = input; HiddenSize = hidden; ActionCount = actions; ScalarCount = scalars;
+        ValueHiddenSize = valueHidden > 0 ? valueHidden : hidden;
         int hh = hidden * hidden;
+        int vh = ValueHiddenSize;
+        int vhh = vh * vh;
         w1 = new float[hidden * input]; b1 = new float[hidden];
         w2 = new float[hh]; b2 = new float[hidden];
         wp = new float[actions * hidden]; bp = new float[actions];
-        wv = new float[hidden]; bv = new float[1];
+        wv = new float[vh]; bv = new float[1];
         gw1 = new float[w1.Length]; gb1 = new float[hidden];
         gw2 = new float[w2.Length]; gb2 = new float[hidden];
         gwp = new float[wp.Length]; gbp = new float[actions];
-        gwv = new float[hidden]; gbv = new float[1];
+        gwv = new float[vh]; gbv = new float[1];
         h1 = new float[hidden]; h2 = new float[hidden];
 
-        // Critic trunk: same shape as the policy trunk, independent weights.
-        vw1 = new float[hidden * input]; vb1 = new float[hidden];
-        vw2 = new float[hh]; vb2 = new float[hidden];
-        gvw1 = new float[vw1.Length]; gvb1 = new float[hidden];
-        gvw2 = new float[vw2.Length]; gvb2 = new float[hidden];
-        vh1 = new float[hidden]; vh2 = new float[hidden];
+        // Critic trunk: independent weights AND an independent width.
+        vw1 = new float[vh * input]; vb1 = new float[vh];
+        vw2 = new float[vhh]; vb2 = new float[vh];
+        gvw1 = new float[vw1.Length]; gvb1 = new float[vh];
+        gvw2 = new float[vw2.Length]; gvb2 = new float[vh];
+        vh1 = new float[vh]; vh2 = new float[vh];
         logits = new float[actions]; probs = new float[actions];
 
         if (scalars > 0)
@@ -109,12 +129,16 @@ public class NeuralNetwork
         for (int i = 0; i < w1.Length; i++) w1[i] = (float)(rng.NextDouble() * 2 - 1) * s1;
         for (int i = 0; i < w2.Length; i++) w2[i] = (float)(rng.NextDouble() * 2 - 1) * s2;
         for (int i = 0; i < wp.Length; i++) wp[i] = (float)(rng.NextDouble() * 2 - 1) * s3;
-        for (int i = 0; i < wv.Length; i++) wv[i] = (float)(rng.NextDouble() * 2 - 1) * s3;
         // Critic trunk uses normal hidden-layer init, not the near-zero policy init: the value head has
         // to produce a spread of predictions immediately, or every advantage looks identical and the
         // first few thousand updates are wasted learning a constant.
+        //
+        // sv2 is derived from the CRITIC's own fan-in. Reusing the policy's s2 would under-scale the
+        // activations by sqrt(vh/hidden) once the widths differ - small here, but it is exactly the kind
+        // of silent scale error that reads as "the critic just doesn't learn".
+        float sv2 = (float)Math.Sqrt(2.0 / vh);
         for (int i = 0; i < vw1.Length; i++) vw1[i] = (float)(rng.NextDouble() * 2 - 1) * s1;
-        for (int i = 0; i < vw2.Length; i++) vw2[i] = (float)(rng.NextDouble() * 2 - 1) * s2;
+        for (int i = 0; i < vw2.Length; i++) vw2[i] = (float)(rng.NextDouble() * 2 - 1) * sv2;
         for (int i = 0; i < wv.Length; i++) wv[i] = (float)(rng.NextDouble() * 2 - 1) * s3;
         // Scalar heads also start near zero, so the initial mu sits at 0 - the MIDPOINT of every
         // squashed range, because sigmoid(0) = 0.5. A mid-range jump or DI is a legal, harmless
@@ -169,22 +193,22 @@ public class NeuralNetwork
         // Critic: its own forward pass over its own trunk. Deliberately NOT reading h2 - see the field
         // comment. Callers must not assume this is the same computation as before; every gradient check
         // is re-run because of it.
-        for (int i = 0; i < HiddenSize; i++)
+        for (int i = 0; i < ValueHiddenSize; i++)
         {
             float s = vb1[i];
             int off = i * InputSize;
             for (int j = 0; j < InputSize; j++) s += vw1[off + j] * x[j];
             vh1[i] = s > 0f ? s : 0f;
         }
-        for (int i = 0; i < HiddenSize; i++)
+        for (int i = 0; i < ValueHiddenSize; i++)
         {
             float s = vb2[i];
-            int off = i * HiddenSize;
-            for (int j = 0; j < HiddenSize; j++) s += vw2[off + j] * vh1[j];
+            int off = i * ValueHiddenSize;
+            for (int j = 0; j < ValueHiddenSize; j++) s += vw2[off + j] * vh1[j];
             vh2[i] = s > 0f ? s : 0f;
         }
         float v = bv[0];
-        for (int j = 0; j < HiddenSize; j++) v += wv[j] * vh2[j];
+        for (int j = 0; j < ValueHiddenSize; j++) v += wv[j] * vh2[j];
         value = v;
         return value;
     }
@@ -330,27 +354,27 @@ public class NeuralNetwork
         // Nothing here touches dh2, gw1, gw2 or the policy hidden layers.
         if (dValue != 0f)
         {
-            for (int j = 0; j < HiddenSize; j++) gwv[j] += dValue * vh2[j];
+            for (int j = 0; j < ValueHiddenSize; j++) gwv[j] += dValue * vh2[j];
             gbv[0] += dValue;
 
-            var dvh2 = new float[HiddenSize];
-            for (int j = 0; j < HiddenSize; j++) dvh2[j] = dValue * wv[j];
+            var dvh2 = new float[ValueHiddenSize];
+            for (int j = 0; j < ValueHiddenSize; j++) dvh2[j] = dValue * wv[j];
 
-            var dvh2pre = new float[HiddenSize];
-            for (int i = 0; i < HiddenSize; i++)
+            var dvh2pre = new float[ValueHiddenSize];
+            for (int i = 0; i < ValueHiddenSize; i++)
             {
                 float g = dvh2[i] * (vh2[i] > 0f ? 1f : 0f);
                 dvh2pre[i] = g;
                 if (g == 0f) continue;
                 gvb2[i] += g;
-                int off2 = i * HiddenSize;
-                for (int j = 0; j < HiddenSize; j++) gvw2[off2 + j] += g * vh1[j];
+                int off2 = i * ValueHiddenSize;
+                for (int j = 0; j < ValueHiddenSize; j++) gvw2[off2 + j] += g * vh1[j];
             }
 
-            for (int j = 0; j < HiddenSize; j++)
+            for (int j = 0; j < ValueHiddenSize; j++)
             {
                 float g = 0f;
-                for (int i = 0; i < HiddenSize; i++) g += dvh2pre[i] * vw2[i * HiddenSize + j];
+                for (int i = 0; i < ValueHiddenSize; i++) g += dvh2pre[i] * vw2[i * ValueHiddenSize + j];
                 g = g * (vh1[j] > 0f ? 1f : 0f);
                 if (g == 0f) continue;
                 gvb1[j] += g;
@@ -576,7 +600,7 @@ public class NeuralNetwork
     {
         return new Weights
         {
-            input = InputSize, hidden = HiddenSize, actions = ActionCount,
+            input = InputSize, hidden = HiddenSize, actions = ActionCount, valueHidden = ValueHiddenSize,
             w1 = (float[])w1.Clone(), b1 = (float[])b1.Clone(),
             w2 = (float[])w2.Clone(), b2 = (float[])b2.Clone(),
             wp = (float[])wp.Clone(), bp = (float[])bp.Clone(),
@@ -617,6 +641,10 @@ public class NeuralNetwork
         // the critic at its random initialisation while claiming a successful resume.
         if (w.vw1 == null || w.vb1 == null || w.vw2 == null || w.vb2 == null) return false;
         if (w.vw1.Length != vw1.Length || w.vw2.Length != vw2.Length) return false;
+        // A file whose recorded critic width disagrees with ours is refused even when the array lengths
+        // happen to match. The length check alone cannot see a future width change that preserves the
+        // total parameter count, and loading it would silently pair weights with the wrong fan-in.
+        if (w.valueHidden != 0 && w.valueHidden != ValueHiddenSize) return false;
 
         Array.Copy(w.w1, w1, w1.Length); Array.Copy(w.b1, b1, b1.Length);
         Array.Copy(w.w2, w2, w2.Length); Array.Copy(w.b2, b2, b2.Length);

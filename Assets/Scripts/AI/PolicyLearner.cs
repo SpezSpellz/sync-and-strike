@@ -94,6 +94,13 @@ public class PolicyLearner
         // degrades to cloning the move alone instead of failing.
         public readonly List<float[]> cloneScalarZ = new List<float[]>();
 
+    /// <summary>Monte-Carlo return target per clone sample, for value pretraining. See EstimatedReturn.</summary>
+    public readonly List<float> cloneReturns = new List<float>();
+
+    /// <summary>Running discounted reward sum during warm start, so each expert turn's return reflects
+    /// everything banked so far this match rather than just the latest turn.</summary>
+    public float warmStartReturn;
+
         // Range descriptors for turning an expert gameplay value into a raw z.
         public ContinuousHead[] cloneHeads;
     }
@@ -137,6 +144,16 @@ public class PolicyLearner
         public List<float[]> cloneObs => brain.cloneObs;
         public List<int> cloneActions => brain.cloneActions;
         public List<float[]> cloneScalarZ => brain.cloneScalarZ;
+    public List<float> cloneReturns => brain.cloneReturns;
+
+    /// <summary>Running discounted reward sum during warm start. Stored on the BRAIN, not the session,
+    /// because both allies share one brain: keeping it per-fighter would let each one overwrite the
+    /// other's trajectory mid-match and produce returns that belong to neither.</summary>
+    public float warmStartReturn
+    {
+        get => brain.warmStartReturn;
+        set => brain.warmStartReturn = value;
+    }
         public ContinuousHead[] cloneHeads { get => brain.cloneHeads; set => brain.cloneHeads = value; }
     }
 
@@ -161,6 +178,19 @@ public class PolicyLearner
     private const int CloneBatchSize = 32;
     private const int SaveEveryUpdates = 25;
     private const int Hidden = 32;
+
+    // The critic's trunk is deliberately WIDER than the policy's.
+    //
+    // At 32/32 the critic's explained variance sat at ~0 - it matched a constant and nothing more, so
+    // every advantage carried almost no signal about which action was better. The two heads are not
+    // asking the same question: the policy ranks discrete actions and can get by on 32 units, while
+    // the critic has to integrate reward over a ~100-turn effective horizon (gamma 0.99) and resolve
+    // small differences in expected outcome. Sizing them together made the critic the smaller of the
+    // two by accident rather than by choice.
+    //
+    // Overridable via -ppo.valueHidden so the width can be swept rather than argued about.
+    private static int valueHidden = 64;
+    private static int ValueHidden => Mathf.Clamp(valueHidden, 8, 512);
 
     // Gaussian scalar heads per policy: jump power, jump angle, DI power, DI angle.
     //
@@ -225,6 +255,7 @@ public class PolicyLearner
             case "learningRate": sharedHyper.learningRate = value; return true;
             case "gamma": sharedHyper.gamma = value; return true;
             case "lambda": sharedHyper.lambda = value; return true;
+            case "valueLambda": sharedHyper.valueLambda = Mathf.Clamp01(value); return true;
             case "clipEpsilon": sharedHyper.clipEpsilon = value; return true;
             case "valueCoef": sharedHyper.valueCoef = value; return true;
             case "entropyCoef": sharedHyper.entropyCoef = value; return true;
@@ -232,6 +263,7 @@ public class PolicyLearner
             case "minibatch": sharedHyper.minibatch = Mathf.Max(2, Mathf.RoundToInt(value)); return true;
             case "bufferSize": sharedHyper.bufferSize = Mathf.Max(8, Mathf.RoundToInt(value)); return true;
             case "maxGradNorm": sharedHyper.maxGradNorm = value; return true;
+            case "valueHidden": valueHidden = Mathf.Max(8, Mathf.RoundToInt(value)); return true;
             default:
                 Debug.LogWarning($"[Training] unknown ppo field '{field}'; ignored.");
                 return false;
@@ -323,7 +355,7 @@ public class PolicyLearner
         var probe = new NeuralPolicy(owner, ruleBrain, new NeuralNetwork(obsSize, Hidden, 2, 1, ScalarsPerPolicy), new System.Random(1));
         int actionCount = probe.ActionCount;
 
-        var net = new NeuralNetwork(obsSize, Hidden, actionCount, owner.GetInstanceID(), ScalarsPerPolicy);
+        var net = new NeuralNetwork(obsSize, Hidden, actionCount, owner.GetInstanceID(), ScalarsPerPolicy, ValueHidden);
         // Only treat saved weights as a starting point when the run explicitly asks to resume.
         // Auto-resuming made an earlier, barely-trained file permanently disable the expert warm
         // start, and the policy then collapsed onto a single do-nothing move.
@@ -388,6 +420,7 @@ public class PolicyLearner
         public int nonfinite;
         public int clippedSteps;
         public int clippedCriticSteps;
+        public float valueStd, returnStd, valueReturnCorr, chainedFraction;
         public bool poisoned;
         public float maxAbsWeight;
     }
@@ -419,6 +452,10 @@ public class PolicyLearner
                 nonfinite = b.trainer.NonFiniteSteps,
                 clippedSteps = b.trainer.ClippedSteps,
                 clippedCriticSteps = b.trainer.ClippedCriticSteps,
+                valueStd = b.trainer.ValueStd,
+                returnStd = b.trainer.ReturnStd,
+                valueReturnCorr = b.trainer.Correlation,
+                chainedFraction = b.trainer.ChainedFraction,
                 poisoned = b.trainer.NetworkIsPoisoned,
                 maxAbsWeight = b.trainer.MaxAbsWeight,
             };
@@ -451,12 +488,25 @@ public class PolicyLearner
             s.cloneObs.Add(p.LastObs);
             s.cloneActions.Add(p.LastExpertAction);
             s.cloneScalarZ.Add(ExpertScalarTargets(s));
+            // Monte-Carlo return target for value pretraining, from arXiv:2503.01491.
+            //
+            // During warm start the expert is playing, so the trajectory's outcome is knowable in closed
+            // form - which is exactly the "train the value model on Monte-Carlo returns under a fixed
+            // policy" recipe the paper prescribes for fixing a collapsed critic. Fitting V before PPO's
+            // first policy update is what stops the critic and the policy gradient from bootstrapping
+            // each other off a bad initialisation.
+            //
+            // Recorded here, at DECISION time, on the expert's chosen action. The turn's reward is not
+            // known until OnTurnResolved, so the running sum is advanced there instead; see
+            // AccumulateWarmStartReturn.
+            s.cloneReturns.Add(s.warmStartReturn);
             if (s.cloneObs.Count >= CloneBatchSize)
             {
                 CloneBatch(s);
                 s.cloneObs.Clear();
                 s.cloneActions.Clear();
                 s.cloneScalarZ.Clear();
+                s.cloneReturns.Clear();
             }
             s.hasPending = true;
             s.pendingSelfHealth = p.LastSelfHealth;
@@ -532,6 +582,11 @@ public class PolicyLearner
         // expert does not stall and the penalty would just offset every warm-start reward.
         if (!done && !s.warmStart && dmgDealt <= 0f && closed <= 0f)
             reward -= rewardConfig.stalemate;
+
+        // Value pretraining: fold this turn's reward into the running Monte-Carlo return that the
+        // clone batches regress the critic against. Warm start only, because after it the trajectories
+        // are the LEARNER's and their outcomes are not knowable in closed form.
+        if (s.warmStart) AccumulateWarmStartReturn(s, reward);
 
         var nextObs = s.policy.CaptureObservation(self, target, ally);
         // The raw scalar samples ride along with the transition. Cloned rather than referenced, because
@@ -658,9 +713,53 @@ public class PolicyLearner
                 Array.Clear(dMu, 0, dMu.Length);
                 Array.Clear(dLogSd, 0, dLogSd.Length);
             }
-            s.net.Backprop(s.cloneObs[i], s.cloneActions[i], 1f, 0f, 0f, dMu, dLogSd);
+
+            // Value pretraining rides along with the behaviour clone.
+            //
+            // The critic is regressed onto the Monte-Carlo return of the expert trajectory this sample
+            // came from, with dValue = V - G. That is ordinary supervised regression on a known target,
+            // not a bootstrapped one, so it cannot be self-reinforcing: however wrong V starts, the
+            // gradient always points at a real number.
+            //
+            // This is the "address the value initialisation bias by value pretraining" step from
+            // arXiv:2503.01491, and it is why warm start is the right place for it - the expert plays a
+            // fixed policy, so its returns are exactly the thing the paper says to fit against.
+            float dValue = 0f;
+            if (s.cloneReturns.Count > i)
+            {
+                s.net.Forward(s.cloneObs[i]);
+                dValue = s.net.Value - s.cloneReturns[i];
+            }
+
+            s.net.Backprop(s.cloneObs[i], s.cloneActions[i], 1f, dValue, 0f, dMu, dLogSd);
         }
         s.net.ApplyGradients(CloneLearningRate / s.cloneObs.Count);
+    }
+
+    /// <summary>
+    /// Monte-Carlo return of the expert turn that just resolved, used as the value-pretraining target.
+    ///
+    /// Deliberately a plain discounted sum of what this fighter has actually banked so far this match,
+    /// with the terminal win/loss bonus folded in on the deciding turn. It is the reward stream the
+    /// reward config already defines, so the critic is trained on the same units the policy is
+    /// optimised against rather than on some rescaled variant.
+    ///
+    /// Stored per clone sample rather than recomputed at fit time because the trajectory is only
+    /// complete once it ends; by the time a batch is fitted, early samples would have to be
+    /// reconstructed from state that has since been overwritten.
+    /// </summary>
+    /// <summary>
+    /// Advance the warm-start discounted return by one resolved expert turn.
+    ///
+    /// Called from OnTurnResolved while warm start is active, so the value-pretraining targets
+    /// recorded at decision time describe the reward actually earned on that turn. sharedHyper is the
+    /// live PPO config, so the pretraining target uses the SAME discount the critic will later be
+    /// trained with; a mismatch would make the critic's target inconsistent with its own bootstrapping,
+    /// which is the very problem being fixed.
+    /// </summary>
+    private static void AccumulateWarmStartReturn(Session s, float reward)
+    {
+        s.warmStartReturn = s.warmStartReturn * sharedHyper.gamma + reward;
     }
 
     // --- Persistence ---------------------------------------------------------

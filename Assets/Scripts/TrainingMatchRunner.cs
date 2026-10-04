@@ -603,7 +603,7 @@ public class TrainingMatchRunner : MonoBehaviour
                 $"EV={kv.Value.explainedVariance:0.###} kl={kv.Value.approxKl:0.####} " +
                 $"clip={kv.Value.clipFraction:0.###} vloss={kv.Value.valueLoss:0.###} " +
                 $"|A|={kv.Value.advantageMagnitude:0.###} rejected={kv.Value.rejected} "
-                + $"nonfinite={kv.Value.nonfinite} clipped={kv.Value.clippedSteps}/{kv.Value.clippedCriticSteps}"
+                + $"nonfinite={kv.Value.nonfinite} clipped={kv.Value.clippedSteps}/{kv.Value.clippedCriticSteps} vStd={kv.Value.valueStd:F2} rStd={kv.Value.returnStd:F2} corr={kv.Value.valueReturnCorr:F2} chained={kv.Value.chainedFraction:F3}"
                 + $"w|max|={kv.Value.maxAbsWeight:0.#}"
                 + (kv.Value.poisoned ? " POISONED" : ""));
         }

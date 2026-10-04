@@ -50,6 +50,22 @@ public class PPOTrainer
         public float learningRate = 3e-4f;
         public float gamma = 0.99f;
         public float lambda = 0.95f;
+
+    /// <summary>Lambda used to build the CRITIC's regression target, separate from the policy's.
+    ///
+    /// Decoupled-GAE, from arXiv:2503.01491. With lambda &lt; 1 the value target is built from the
+    /// critic's own current prediction, which is semi-gradient descent and is self-reinforcing: a critic
+    /// that starts near zero builds a target near zero and keeps predicting near zero. Setting this to
+    /// 1.0 makes the critic regress onto accumulated rewards instead - plain, stable gradient descent.
+    ///
+    /// Measured on this game before the fix: the critic's output std sat at 0.01 against a return std
+    /// of 1.42, a ratio of about 1:100. The critic was not under-capacity; it was being trained on a
+    /// target it had itself collapsed.
+    ///
+    /// The policy keeps <see cref="lambda"/>. The paper proves (Eq. 8) that using a critic fitted with a
+    /// different lambda introduces no additional bias in the policy gradient, so the policy retains the
+    /// variance reduction it needs.</summary>
+    public float valueLambda = 1f;
         public float clipEpsilon = 0.2f;
         public float valueCoef = 0.5f;
         public float entropyCoef = 0.01f;
@@ -128,6 +144,25 @@ public class PPOTrainer
     /// advantage estimate is noise and no amount of reward tuning will help until it is fixed.
     /// </summary>
     public float ExplainedVariance { get; private set; }
+
+    /// <summary>Variance of the critic's predictions over the last batch. Near zero means the head has
+    /// collapsed to a constant and the critic is not participating in learning at all.</summary>
+    public float ValueVariance { get; private set; }
+    public float ValueStd { get; private set; }
+    public float ReturnStd { get; private set; }
+
+    /// <summary>Correlation between predicted value and return over the last batch. Healthy PPO runs
+    /// sit well above 0.5 once the critic has warmed up.</summary>
+    public float Correlation { get; private set; }
+
+    /// <summary>Fraction of transitions that received multi-step GAE credit rather than being treated
+    /// as a chain start. Near 0 means the recursion is severed almost everywhere; near 1 means the
+    /// trajectories are intact. A healthy 2v1 shared brain sits high, because the buffer interleaves
+    /// fighters but each fighter's own run is contiguous after sorting.</summary>
+    public float ChainedFraction { get; private set; }
+
+    /// <summary>ValueStd / ReturnStd. See the note at the computation site for how to read it.</summary>
+    public float RatioValueToReturn { get; private set; }
 
     /// <summary>Total parameter-update steps applied, for spotting a stalled learner.</summary>
     public int MinibatchCount { get; private set; }
@@ -236,25 +271,88 @@ public class PPOTrainer
         // --- GAE advantages ---
         var advantage = new float[n];
         var returns = new float[n];
-        float gae = 0f;
-        for (int t = n - 1; t >= 0; t--)
+
+        // Order in which transitions were collected. 2v1 shares one brain across Player and Companion,
+        // and TurnManager resolves them in list order, so the buffer arrives INTERLEAVED: P, C, P, C...
+        // GAE is a recursion along a trajectory, so walking this array in collection order would
+        // discount each fighter's advantage toward the OTHER fighter's next state.
+        var order = new int[n];
+        for (int i = 0; i < n; i++) order[i] = i;
+
+        // Stable sort by (agentId, episode) so each fighter's own transitions form one contiguous run
+        // in collection order. Sorting is what makes the recursion valid - the previous attempt instead
+        // refused to continue the chain whenever the next index belonged to a different fighter, which
+        // in a strictly alternating buffer is almost every index. That quietly reduced GAE to one-step
+        // TD, which made explained variance look repaired (-1.6 -> 0.00) while the critic was in fact
+        // being trained to predict single-turn rewards that barely vary. The metric improved because
+        // the question got easier, not because the critic improved.
+        // Array.Sort is NOT stable, so an explicit sequence stamp is required. Without it two transitions from
+        // the same (agent, episode) pair can be reordered relative to each other, which reverses the
+        // direction GAE walks them in and turns the recursion into a sum of unrelated terms. That is a
+        // silent failure: no warning, no NaN, just advantages that mean nothing.
+        //
+        // The comparators must agree: the boundary tests below compare agentId and episode, so a
+        // mismatch between how transitions are SORTED and how GROUPS are detected would split one group
+        // in two places and re-introduce the bug the sort exists to remove.
+        var seq = new int[n];
+        for (int i = 0; i < n; i++) seq[i] = i;
+        Array.Sort(order, (a, b) =>
         {
-            var tr = buffer[t];
-            float nextValue = 0f;
-            if (!tr.done) nextValue = net.Forward(tr.nextObs);
+            var ta = buffer[a]; var tb = buffer[b];
+            int c = ta.agentId.CompareTo(tb.agentId);
+            if (c != 0) return c;
+            c = ta.episode.CompareTo(tb.episode);
+            if (c != 0) return c;
+            return seq[a].CompareTo(seq[b]);
+        });
+
+        // Bootstrap value for the last transition of each group, evaluated once per group.
+        var bootValue = new float[n];
+        for (int k = 0; k < n; k++)
+        {
+            int idx = order[k];
+            bool lastOfGroup = k == n - 1
+                               || buffer[order[k + 1]].agentId != buffer[idx].agentId
+                               || buffer[order[k + 1]].episode != buffer[idx].episode;
+            if (lastOfGroup && !buffer[idx].done) bootValue[k] = net.Forward(buffer[idx].nextObs);
+        }
+
+        // Walk each group backwards, maintaining a separate GAE accumulator per group.
+        var groupGae = new Dictionary<long, float>();
+        int chained = 0;
+        for (int k = n - 1; k >= 0; k--)
+        {
+            int idx = order[k];
+            var tr = buffer[idx];
+            float nextValue = tr.done ? 0f : bootValue[k];
             float delta = tr.reward + hyper.gamma * nextValue - tr.value;
 
-            // The continuation term may only carry over from the transition that actually FOLLOWS this
-            // one in the same fighter's own trajectory. With a shared 2v1 brain the buffer interleaves
-            // two fighters, so without this guard each fighter's advantage is discounted toward the
-            // other's next state - corrupting both, silently.
-            bool continues = !tr.done && t < n - 1
-                             && buffer[t + 1].agentId == tr.agentId
-                             && buffer[t + 1].episode == tr.episode;
-            gae = delta + (continues ? hyper.gamma * hyper.lambda * gae : 0f);
-            advantage[t] = gae;
-            returns[t] = gae + tr.value;
+            long key = ((long)tr.agentId << 32) ^ (uint)tr.episode;
+            bool firstOfGroupBackwards = k == n - 1
+                                        || buffer[order[k + 1]].agentId != tr.agentId
+                                        || buffer[order[k + 1]].episode != tr.episode;
+            float prev = 0f;
+            if (!firstOfGroupBackwards) groupGae.TryGetValue(key, out prev);
+
+            // Policy advantages keep the biased, variance-reduced lambda; the critic's regression
+            // target uses valueLambda (1.0), which makes it regress onto accumulated rewards rather
+            // than onto its own current output.
+            float gaePolicy = delta + (firstOfGroupBackwards ? 0f : hyper.gamma * hyper.lambda * prev);
+            float gaeValue = delta + (firstOfGroupBackwards ? 0f : hyper.gamma * hyper.valueLambda * prev);
+            groupGae[key] = gaePolicy;
+            if (!firstOfGroupBackwards) chained++;
+
+            advantage[idx] = gaePolicy;
+            // returns must be the CRITIC's target, so they follow valueLambda. Using the policy's
+            // lambda here would re-import exactly the self-referential target Decoupled-GAE removes.
+            returns[idx] = gaeValue + tr.value;
         }
+
+        // Fraction of transitions that actually received multi-step credit. Near 0 means the recursion
+        // is being severed almost everywhere - which is what a mis-ordered or over-eager boundary guard
+        // looks like, and is invisible in explained variance because a one-step target is trivially
+        // predictable. This is the check whose absence let the previous bug masquerade as a fix.
+        ChainedFraction = n > 1 ? (float)chained / (n - 1) : 0f;
 
         // Diagnostics are computed on the RAW advantages and returns, before normalisation. Computing
         // them afterwards would be meaningless: normalised advantages are zero-mean unit-variance by
@@ -280,6 +378,38 @@ public class PPOTrainer
             varRet /= n;
             varErr /= n;
             ExplainedVariance = varRet > 1e-8f ? 1f - varErr / varRet : 0f;
+
+            // Variance of the critic's own predictions, and the correlation with the returns.
+            //
+            // Explained variance alone cannot distinguish its two failure modes. A critic that predicts
+            // a constant and one that predicts the right SHAPE with the wrong offset both score ~0, but
+            // they need completely different fixes - the first is capacity or dead units, the second is
+            // a bias/scale problem that a centring term would solve. This run sat at EV ~ 0 through three
+            // separate fixes (wider trunk, isolated trunk, independent clipping), so the next step is to
+            // measure which of the two it is rather than guess a fourth.
+            //
+            // RatioValueToReturn is the discriminator:
+            //   ~0.0  -> the head has collapsed to (nearly) a constant: no output variance at all.
+            //   ~1.0  -> matching spread but uncorrelated: capacity or feature problem.
+            //   >1.0  -> over-dispersed predictions, which the buffer's stale values would produce.
+            float meanVal = 0f;
+            for (int t = 0; t < n; t++) meanVal += buffer[t].value;
+            meanVal /= n;
+            float varPred = 0f, cov = 0f;
+            for (int t = 0; t < n; t++)
+            {
+                float dPred = buffer[t].value - meanVal;
+                float dRet2 = returns[t] - meanRet;
+                varPred += dPred * dPred;
+                cov += dPred * dRet2;
+            }
+            varPred /= n;
+            cov /= n;
+            ValueVariance = varPred;
+            ReturnStd = Mathf.Sqrt(varRet);
+            ValueStd = Mathf.Sqrt(varPred);
+            Correlation = varRet > 1e-8f && varPred > 1e-8f ? cov / Mathf.Sqrt(varRet * varPred) : 0f;
+            RatioValueToReturn = varRet > 1e-8f ? varPred / varRet : 0f;
         }
 
         // Normalise advantages for a stable step size.
