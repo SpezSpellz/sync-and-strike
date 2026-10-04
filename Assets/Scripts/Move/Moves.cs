@@ -20,14 +20,11 @@ public class Moves : MonoBehaviour
         return new DisplayMove("vertical_slash", this.vert_slash_move_sprites, false);
     }
     public static Moves Instance { get; private set; }
+    [HideInInspector] public Arena Arena;
     void Awake()
     {
-        if (Instance != null)
-        {
-            Debug.LogError("There is more than one instance!");
-            return;
-        }
         Instance = this;
+        Arena = GetComponentInParent<Arena>();
     }
     
 }

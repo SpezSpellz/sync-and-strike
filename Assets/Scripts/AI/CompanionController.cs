@@ -78,6 +78,29 @@ public class CompanionController : AIController
         return ResolveTarget();
     }
 
+    /// <summary>
+    /// The companion plays on an on-device PPO policy (see <see cref="CompanionLearner"/>) that keeps
+/// training on the player's own machine from their votes and match outcomes. The rule-based brain is
+    /// still used during the warm start and to supply the jump/DI geometry each turn.
+    /// </summary>
+    protected override FighterPolicy SelectBrain()
+    {
+        return CompanionLearner.CreatePolicy(this, ruleBrain);
+    }
+
+    /// <summary>Public accessor for the on-device learner so it can build the next observation.</summary>
+    public CharacterController ResolveTargetForTraining() => ResolveTarget();
+
+    /// <summary>Public accessor for the on-device learner so it can build the next observation.</summary>
+    public CharacterController ResolveAllyForTraining() => ResolveAlly();
+
+    public override void RequestDecision()
+    {
+        base.RequestDecision();
+        // Capture the committed transition and fold in any pending PPO update.
+        CompanionLearner.NotifyDecision(this);
+    }
+
     /// <summary>Called by TurnManager when the turn starts so the companion can vote-prompt later.</summary>
     public void PrepareVoting()
     {

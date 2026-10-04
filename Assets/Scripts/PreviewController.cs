@@ -21,6 +21,12 @@ public class PreviewController : MonoBehaviour
     private bool processedEventsThisCycle;
     private CharacterController owner;
     public CharacterController Owner => owner;
+    [HideInInspector] public Arena Arena;
+
+    private PreviewPhysicsManager PreviewPhysics => Arena != null ? Arena.previewPhysicsManager : PreviewPhysicsManager.Instance;
+    private PreviewHitboxManager PreviewHitbox => Arena != null ? Arena.previewHitboxManager : PreviewHitboxManager.Instance;
+    private PreviewManager PreviewCtl => Arena != null ? Arena.previewManager : PreviewManager.Instance;
+
     private const float FRAME_TIME = 1f / 60f; // 60 fps
 
     /// <summary>
@@ -40,6 +46,7 @@ public class PreviewController : MonoBehaviour
     {
         previewPhysics = GetComponent<CharacterPhysics>();
         previewPhysics.skipPhysicsManagerRegistration = true;
+        Arena = GetComponentInParent<Arena>();
     }
 
     public void Initialize(CharacterData characterData)
@@ -52,7 +59,7 @@ public class PreviewController : MonoBehaviour
         foreach (var collider in physicsObjects)
         {
             // Register real world object that preview can collide to
-            PreviewPhysicsManager.Instance.Register(collider);
+            PreviewPhysics.Register(collider);
         }
     }
 
@@ -96,8 +103,8 @@ public class PreviewController : MonoBehaviour
         }
 
         Preview();
-        PreviewManager.Instance.RegisterPreview(this);
-        PreviewPhysicsManager.Instance.Register(previewPhysics);
+        PreviewCtl.RegisterPreview(this);
+        PreviewPhysics.Register(previewPhysics);
     }
 
     public void StopPreview()
@@ -105,8 +112,8 @@ public class PreviewController : MonoBehaviour
         active = false;
         moveData = null;
         previewRenderer.gameObject.SetActive(false);
-        PreviewManager.Instance.UnregisterPreview(this);
-        PreviewPhysicsManager.Instance.Unregister(previewPhysics);
+        PreviewCtl.UnregisterPreview(this);
+        PreviewPhysics.Unregister(previewPhysics);
     }
 
     public void Restart()
@@ -238,7 +245,7 @@ public class PreviewController : MonoBehaviour
     {
         if (data == null) return;
         Vector2 pos = previewPhysics.getPosition();
-        PreviewHitboxManager.Instance.SubmitHurtBox(
+        PreviewHitbox.SubmitHurtBox(
             new HurtBox(
                 owner,
                 pos.x - data.width * 0.5f,
@@ -285,12 +292,12 @@ public class PreviewController : MonoBehaviour
         float minY = pos.y + data.offsetY - data.height * 0.5f;
         float maxY = pos.y + data.offsetY + data.height * 0.5f;
 
-        PreviewHitboxManager.Instance.SubmitHitBox(
+        PreviewHitbox.SubmitHitBox(
             new HitBox(
                 owner,
                 (target) =>
                 {
-                    var targetPreview = PreviewManager.Instance.GetPreviewByOwner(target);
+                    var targetPreview = PreviewCtl.GetPreviewByOwner(target);
                     if (targetPreview != null)
                         targetPreview.ApplyPreviewKnockback(
                             new Vector2(data.knockback.x * facing, data.knockback.y)

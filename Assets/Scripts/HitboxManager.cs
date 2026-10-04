@@ -13,9 +13,11 @@ public class HitboxManager : MonoBehaviour
     private List<GameObject> hurtbox_visualizations = new();
     private List<GameObject> hitbox_visualizations = new();
     public static HitboxManager Instance;
+    [HideInInspector] public Arena Arena;
     private void Awake()
     {
         Instance = this;
+        Arena = GetComponentInParent<Arena>();
     }
     public void SubmitHitBox(HitBox hitbox)
     {

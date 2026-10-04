@@ -5,11 +5,16 @@ using UnityEngine;
 public class PreviewManager : MonoBehaviour
 {
     public static PreviewManager Instance { get; private set; }
+    [HideInInspector] public Arena Arena;
     private readonly List<PreviewController> previews = new();
     private const float SIMULATION_STEP = 1f / 60f;
     private float accumulator;
 
-    private void Awake() => Instance = this;
+    private void Awake()
+    {
+        Instance = this;
+        Arena = GetComponentInParent<Arena>();
+    }
 
     public void RegisterPreview(PreviewController preview)
     {
@@ -46,7 +51,8 @@ public class PreviewManager : MonoBehaviour
         }
 
         // after stepping, resolve preview hitboxes
-        PreviewHitboxManager.Instance.Step();
+        var hbm = Arena != null ? Arena.previewHitboxManager : PreviewHitboxManager.Instance;
+        hbm.Step();
     }
 
     public PreviewController GetPreviewByOwner(CharacterController owner)

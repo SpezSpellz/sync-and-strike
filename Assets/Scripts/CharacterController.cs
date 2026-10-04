@@ -174,7 +174,7 @@ public class CharacterController : MonoBehaviour
     {
         get
         {
-            var manager = TurnManager.Instance;
+            var manager = Turn;
             if (manager == null) return null;
             var all = manager.GetAllPlayers();
             for (int i = 0; i < all.Count; i++)
@@ -276,7 +276,13 @@ public class CharacterController : MonoBehaviour
 
         stateMachine = new FighterStateMachine(this);
         anim.OnFrameEvent = OnFrameEvent;
+        _arena = GetComponentInParent<Arena>();
     }
+
+    private Arena _arena;
+    private TurnManager Turn => _arena != null ? _arena.turnManager : TurnManager.Instance;
+    private HitboxManager Hitbox => _arena != null ? _arena.hitboxManager : HitboxManager.Instance;
+    private PreviewManager PreviewCtl => _arena != null ? _arena.previewManager : PreviewManager.Instance;
 
     private void Update()
     {
@@ -289,7 +295,7 @@ public class CharacterController : MonoBehaviour
         previewController?.Initialize(characterData);
         anim.Initialize(characterData.animations);
         stateMachine.Change(new IdleState(this));
-        this.id = TurnManager.Instance.RegisterPlayer(this);
+        this.id = Turn.RegisterPlayer(this);
     }
 
     public void PlayIdleAnimation() => anim.PlayIdle();
@@ -437,7 +443,7 @@ public class CharacterController : MonoBehaviour
         float cy = transform.position.y + data.offsetY;
         LastMoveUsed = anim.CurrentMove != null ? anim.CurrentMove.moveId : "";
 
-        HitboxManager.Instance.SubmitHitBox(new HitBox(
+        Hitbox.SubmitHitBox(new HitBox(
             this,
             target =>
             {
@@ -642,7 +648,7 @@ public class CharacterController : MonoBehaviour
 
         stateMachine.Step();
         physics.Step();
-        HitboxManager.Instance.SubmitHurtBox(getHurtBox());
+        Hitbox.SubmitHurtBox(getHurtBox());
     }
 
     public void ExecuteMove(string moveId, Action onComplete = null)
@@ -702,14 +708,14 @@ public class CharacterController : MonoBehaviour
 
     public void ShowMovePreview(AnimationData moveData)
     {
-        PreviewManager.Instance.RestartAllPreviews();
+        PreviewCtl.RestartAllPreviews();
         previewController?.StopPreview();
         previewController?.StartPreview(moveData, this);
     }
 
     public void ResumePreview()
     {
-        PreviewManager.Instance.RestartAllPreviews();
+        PreviewCtl.RestartAllPreviews();
         previewController?.StopPreview();
         if (anim.HasActiveMove)
         {

@@ -31,7 +31,7 @@ public struct AIDecision
 /// The brain only ever picks from <see cref="CharacterData.animations"/>, so the companion
 /// automatically shares the player's moveset without any duplicated move list.
 /// </summary>
-public class FighterAI
+public class FighterAI : FighterPolicy
 {
     [Serializable]
     public class Personality
@@ -76,7 +76,7 @@ public class FighterAI
     /// <paramref name="ally"/> is the other fighter on the same team (the player, when this
     /// brain drives the companion) and is only used for spacing.
     /// </summary>
-    public AIDecision Decide(CharacterController self, CharacterController target, CharacterController ally)
+    public override AIDecision Decide(CharacterController self, CharacterController target, CharacterController ally)
     {
         retreatJump = false;
 

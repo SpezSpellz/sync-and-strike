@@ -11,6 +11,14 @@ public class CharacterPhysics : PhysicsCollider
     private float veloY = 0.0f;
     private bool isPreview = false;
     public bool IsGrounded { get; private set; } = true;
+
+    private Arena _arena;
+    private PhysicsManager PhysManager() => _arena != null ? _arena.physicsManager : PhysicsManager.Instance;
+    private PreviewPhysicsManager PPManager() => _arena != null ? _arena.previewPhysicsManager : PreviewPhysicsManager.Instance;
+    private IndexSet<PhysicsCollider> RegisteredObjects()
+    {
+        return isPreview ? PPManager().GetRegisteredObjects() : PhysManager().GetRegisteredObjects();
+    }
     /// <summary>Number of simulation frames the character has been standing on the ground.</summary>
     public int GroundedFrames { get; private set; } = 0;
 
@@ -27,6 +35,13 @@ public class CharacterPhysics : PhysicsCollider
     {
         this.characterData = characterData;
         this.isPreview = isPreview;
+        _arena = GetComponentInParent<Arena>();
+    }
+
+    public override void Start()
+    {
+        _arena = GetComponentInParent<Arena>();
+        base.Start();
     }
     public void ApplyImpulse(Vector2 impulse)
     {
@@ -135,11 +150,11 @@ public class CharacterPhysics : PhysicsCollider
     {
         if (isPreview)
         {
-            PreviewPhysicsManager.Instance.StepFor(this);
+            PPManager().StepFor(this);
         }
         else
         {
-            PhysicsManager.Instance.StepFor(this);
+            PhysManager().StepFor(this);
         }
 
         // Apply outstanding pushback on the tick it comes due, before integrating.
@@ -242,13 +257,6 @@ public class CharacterPhysics : PhysicsCollider
         return best == float.NegativeInfinity ? transform.position.y : best;
     }
 
-    private IndexSet<PhysicsCollider> RegisteredObjects()
-    {
-        return isPreview
-            ? PreviewPhysicsManager.Instance.GetRegisteredObjects()
-            : PhysicsManager.Instance.GetRegisteredObjects();
-    }
-
     void OnDrawGizmos()
     {
         Gizmos.color = Color.red;
@@ -300,9 +308,7 @@ public class CharacterPhysics : PhysicsCollider
     {
         AABB self = getBoundingBox();
         if (self == null) return false;
-        IndexSet<PhysicsCollider> objects = isPreview
-            ? PreviewPhysicsManager.Instance.GetRegisteredObjects()
-            : PhysicsManager.Instance.GetRegisteredObjects();
+        IndexSet<PhysicsCollider> objects = RegisteredObjects();
         if (objects == null) return false;
         foreach (PhysicsCollider other in objects.getList())
         {
@@ -367,9 +373,7 @@ public class CharacterPhysics : PhysicsCollider
     private bool IsGroundedBySweep()
     {
         AABB self = getBoundingBox();
-        IndexSet<PhysicsCollider> objects = isPreview
-            ? PreviewPhysicsManager.Instance.GetRegisteredObjects()
-            : PhysicsManager.Instance.GetRegisteredObjects();
+        IndexSet<PhysicsCollider> objects = RegisteredObjects();
         if (self == null || objects == null) return false;
 
         float feetY = self.minY;

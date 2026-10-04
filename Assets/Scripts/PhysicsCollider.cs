@@ -7,7 +7,11 @@ public abstract class PhysicsCollider : MonoBehaviour
     public virtual void Start()
     {
         if (!skipPhysicsManagerRegistration)
-            this.colliderId = PhysicsManager.Instance.RegisterCollider(this);
+        {
+            var arena = GetComponentInParent<Arena>();
+            var pm = arena != null ? arena.physicsManager : PhysicsManager.Instance;
+            this.colliderId = pm.RegisterCollider(this);
+        }
     }
 
     public int getId()

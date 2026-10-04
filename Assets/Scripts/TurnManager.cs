@@ -6,9 +6,21 @@ public class TurnManager : MonoBehaviour
 {
     public static TurnManager Instance { get; private set; }
     public TurnPhase Phase { get; private set; }
+    [HideInInspector] public Arena Arena;
 
-    private const float SECONDS_PER_FRAME = 1f / 60f; // SET GAME FRAME RATE TO 60 FPS. DO NOT CHANGE
-    // private const float SECONDS_PER_FRAME = 0.001f; // SET GAME FRAME RATE TO VERY HIGH FOR TRAINING
+    private HitboxManager Hitbox => Arena != null ? Arena.hitboxManager : HitboxManager.Instance;
+    private UIManager UI => Arena != null ? Arena.uiManager : UIManager.Instance;
+    private CompanionVoteManager VoteManager => Arena != null ? Arena.companionVoteManager : CompanionVoteManager.Instance;
+
+    /// <summary>
+    /// Fired at the end of every simulated turn, after fighters are force-finished but BEFORE the
+    /// vote prompt pauses the loop. The companion's on-device PPO learner uses this to turn the
+    /// resolved turn into a reward. Instance-scoped so multi-arena training can route per arena.
+    /// </summary>
+    public event Action TurnResolved;
+
+    private float LOCAL_SECONDS_PER_FRAME => TrainingMode.enabled ? TrainingMode.secondsPerFrame : 1f / 60f;
+    private const float DEFAULT_SECONDS_PER_FRAME = 1f / 60f; // SET GAME FRAME RATE TO 60 FPS. DO NOT CHANGE
 
     [SerializeField]
     private bool fastForward;
@@ -39,6 +51,7 @@ public class TurnManager : MonoBehaviour
     private void Awake()
     {
         Instance = this;
+        Arena = GetComponentInParent<Arena>();
         Phase = TurnPhase.Planning;
     }
 
@@ -121,7 +134,7 @@ public class TurnManager : MonoBehaviour
             completedCount = 0;
             framesThisTurn = 0;
             ticksAwaiting = 0f;
-            UIManager.Instance.HideMoveUI();
+            UI?.HideMoveUI();
             foreach (var player_turn_data in players.getList())
             {
                 var player = player_turn_data.player;
@@ -168,7 +181,7 @@ public class TurnManager : MonoBehaviour
             player.ResetComboState();
             player.RequestDecision();
         }
-        UIManager.Instance.ShowMoveUI();
+        UI?.ShowMoveUI();
     }
 
     /// <summary>
@@ -200,7 +213,7 @@ public class TurnManager : MonoBehaviour
                     ticksAwaiting += Time.deltaTime;
                     while (ticksAwaiting > 0 || (fastForward && ++count < 100))
                     {
-                        ticksAwaiting -= SECONDS_PER_FRAME;
+                        ticksAwaiting -= LOCAL_SECONDS_PER_FRAME;
                         int totalPlayers = players.getList().Count;
                         if (completedCount >= totalPlayers || framesThisTurn >= maxTurnFrames)
                         {
@@ -212,7 +225,7 @@ public class TurnManager : MonoBehaviour
                         {
                             player_turn_data.player.Step();
                         }
-                        HitboxManager.Instance.Step();
+                        Hitbox.Step();
                         framesThisTurn++;
                     }
                     break;
@@ -248,11 +261,15 @@ public class TurnManager : MonoBehaviour
             player_turn_data.player.ForceFinishMove();
         }
 
+        // Reward hook for the companion's on-device learner. Fired before the vote prompt pauses
+        // the loop so the learner sees the resolved turn immediately.
+        try { TurnResolved?.Invoke(); } catch (System.Exception e) { Debug.LogException(e); }
+
         var companion = FindCompanion();
         if (companion != null && !companion.IsDead())
         {
             // Ask the player to rate the companion's move before the next planning phase.
-            var voteManager = CompanionVoteManager.Instance;
+            var voteManager = VoteManager;
             if (voteManager != null && voteManager.VotingEnabled)
             {
                 voteManager.PrepareForTurn(companion);
@@ -275,7 +292,7 @@ public class TurnManager : MonoBehaviour
         if (Phase != TurnPhase.AwaitingVote) return;
         if (Time.time - voteAwaitStartedAt > maxVoteWaitSeconds)
         {
-            CompanionVoteManager.Instance?.ForceResolveAsSkipped();
+            VoteManager?.ForceResolveAsSkipped();
             BeginPlanning();
         }
     }

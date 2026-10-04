@@ -4,10 +4,12 @@ using UnityEngine;
 public class PhysicsManager : MonoBehaviour
 {
     public static PhysicsManager Instance { get; private set; }
+    [HideInInspector] public Arena Arena;
     private IndexSet<PhysicsCollider> physicsObjects = new();
     private void Awake()
     {
         Instance = this;
+        Arena = GetComponentInParent<Arena>();
     }
 
     public int RegisterCollider(PhysicsCollider collider)

@@ -40,6 +40,13 @@ public class CompanionVoteManager : MonoBehaviour
     private static CompanionVoteManager instance;
 
     /// <summary>
+    /// Fired once the player has rated the companion's move: (isGood, timedOut). The companion's
+    /// on-device PPO learner folds this into the previous turn's reward, so a "bad" vote directly
+    /// discourages the move that was just played.
+    /// </summary>
+    public static event Action<bool, bool> VoteResolved;
+
+    /// <summary>
     /// Self-bootstrapping on purpose: the turn loop must never deadlock waiting on a rating
     /// prompt that has no manager, so the manager is created on demand if it was not added
     /// to the scene as a component.
@@ -83,6 +90,8 @@ public class CompanionVoteManager : MonoBehaviour
 
     private readonly List<VoteRecord> history = new List<VoteRecord>();
 
+    [HideInInspector] public Arena Arena;
+
     private void Awake()
     {
         if (instance != null && instance != this)
@@ -92,11 +101,12 @@ public class CompanionVoteManager : MonoBehaviour
             return;
         }
         instance = this;
+        Arena = GetComponentInParent<Arena>();
         logPath = Path.Combine(Application.persistentDataPath, "companion_votes.jsonl");
     }
 
     /// <summary>Whether the rating prompt should be shown at all.</summary>
-    public bool VotingEnabled => votingEnabled;
+    public bool VotingEnabled => votingEnabled && !TrainingMode.enabled;
 
     /// <summary>
     /// Called by TurnManager's backstop when the prompt has not resolved in time. Records the
@@ -115,7 +125,7 @@ public class CompanionVoteManager : MonoBehaviour
     /// <summary>Called by TurnManager right before a new planning phase begins.</summary>
     public void PrepareForTurn(CompanionController companionController)
     {
-        if (!available || !votingEnabled) return;
+        if (!available || !VotingEnabled) return;
         this.companion = companionController;
     }
 
@@ -126,7 +136,7 @@ public class CompanionVoteManager : MonoBehaviour
     public void BeginVoteFor(CompanionController companionController, AIDecision decision,
         AIDecisionContext context, float timeout)
     {
-        if (!available || !votingEnabled) return;
+        if (!available || !VotingEnabled) return;
         if (companionController == null || companionController.IsDead()) return;
 
         this.companion = companionController;
@@ -172,8 +182,11 @@ public class CompanionVoteManager : MonoBehaviour
         history.Add(record);
         AppendToLog(record);
 
+        try { VoteResolved?.Invoke(isGood, timedOut); } catch (Exception e) { Debug.LogException(e); }
+
         // The vote never blocks the game: resume planning immediately after it resolves.
-        TurnManager.Instance.ResumeAfterVote();
+        var tm = Arena != null ? Arena.turnManager : TurnManager.Instance;
+        tm.ResumeAfterVote();
     }
 
     private void AppendToLog(VoteRecord record)

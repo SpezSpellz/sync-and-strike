@@ -16,12 +16,18 @@ public abstract class AIController : CharacterController
     [Tooltip("How much the AI wanders its seed each match so repeated runs are not identical.")]
     private int seedJitter = 0;
 
-    private FighterAI brain;
+    protected FighterAI ruleBrain;
+    private FighterPolicy brain;
+    private Arena _arena;
+    private Arena Arena => _arena != null ? _arena : (_arena = GetComponentInParent<Arena>());
+    private TurnManager TurnMgr => Arena != null ? Arena.turnManager : TurnManager.Instance;
     private FighterAI.Personality runtimePersonality;
 
     /// <summary>The decision made for the current turn. Read by the voting UI and the trainer.</summary>
     public AIDecision CurrentDecision { get; private set; }
-    public FighterAI Brain => brain;
+    public FighterPolicy Brain => brain;
+    /// <summary>The rule-based brain, always available even when the active brain is a PPO policy.</summary>
+    public FighterAI RuleBrain => ruleBrain;
     public FighterAI.Personality Profile => runtimePersonality;
 
     /// <summary>Snapshot taken when the decision was made, used to score the decision later.</summary>
@@ -33,7 +39,17 @@ public abstract class AIController : CharacterController
         // so copy it field by field rather than using Instantiate.
         runtimePersonality = CopyPersonality(personality);
         ConfigurePersonality(runtimePersonality);
-        brain = new FighterAI(runtimePersonality, seed + Random.Range(0, Mathf.Max(1, seedJitter)));
+        ruleBrain = new FighterAI(runtimePersonality, seed + Random.Range(0, Mathf.Max(1, seedJitter)));
+        brain = SelectBrain();
+    }
+
+    /// <summary>
+    /// Choose the active brain. Defaults to the rule-based brain, which is what the frozen enemy
+    /// uses. The companion overrides this to return its on-device PPO policy.
+    /// </summary>
+    protected virtual FighterPolicy SelectBrain()
+    {
+        return ruleBrain;
     }
 
     private static FighterAI.Personality CopyPersonality(FighterAI.Personality from)
@@ -77,7 +93,7 @@ public abstract class AIController : CharacterController
     {
         if (IsDead())
         {
-            TurnManager.Instance.ResetState();
+            TurnMgr.ResetState();
             return;
         }
 
@@ -86,7 +102,7 @@ public abstract class AIController : CharacterController
         DecisionContext = AIDecisionContext.Capture(this, target, ResolveAlly(), CurrentDecision);
 
         ApplyDecision(CurrentDecision);
-        TurnManager.Instance.SubmitMove(this);
+        TurnMgr.SubmitMove(this);
     }
 
     /// <summary>
