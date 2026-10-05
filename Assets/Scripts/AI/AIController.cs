@@ -16,6 +16,16 @@ public abstract class AIController : CharacterController
     [Tooltip("How much the AI wanders its seed each match so repeated runs are not identical.")]
     private int seedJitter = 0;
 
+    /// <summary>
+    /// RNG for the random behaviour source. Seeded from this fighter's own seed rather than from
+    /// <c>UnityEngine.Random</c>, because the training run seeds the latter globally and a scripted
+    /// opponent drawing from it would make the random curriculum phase depend on unrelated draw order.
+    /// </summary>
+    private System.Random behaviourRng;
+
+    /// <summary>Moves this fighter can choose between, cached for the random source's action indexing.</summary>
+    private string[] moveIds;
+
     protected FighterAI ruleBrain;
     private FighterPolicy brain;
     // Arena and its _arena cache are declared once on CharacterController. Redeclaring them here
@@ -41,7 +51,18 @@ public abstract class AIController : CharacterController
         ConfigurePersonality(runtimePersonality);
         ruleBrain = new FighterAI(runtimePersonality, seed + Random.Range(0, Mathf.Max(1, seedJitter)));
         brain = SelectBrain();
+        behaviourRng = new System.Random(seed);
+        moveIds = NeuralPolicy.BuildMoveIds(this);
     }
+
+    /// <summary>
+    /// Where this fighter's actions for the current match come from. Set per match by the training
+    /// runner; <see cref="BehaviourSource.Live"/> outside training, which is what ships.
+    /// </summary>
+    public BehaviourSource BehaviourSource { get; private set; } = BehaviourSource.Live;
+
+    /// <summary>Set by the training runner when it assigns opponents for a match.</summary>
+    public void SetBehaviourSource(BehaviourSource source) => BehaviourSource = source;
 
     /// <summary>
     /// Choose the active brain. Defaults to the rule-based brain, which is what the frozen enemy
@@ -142,13 +163,59 @@ public abstract class AIController : CharacterController
         }
 
         var target = ResolveTarget();
-        CurrentDecision = brain.Decide(this, target, ResolveAlly());
-        DecisionContext = AIDecisionContext.Capture(this, target, ResolveAlly(), CurrentDecision);
 
-        ExpertGeometry = CurrentDecision;
-        HasExpertGeometry = true;
+        // The source decides WHO acts, and only the network sources are allowed to publish expert
+        // geometry. That conditional is load-bearing rather than tidiness: ExpertGeometry is the clone
+        // teacher PolicyLearner reads during warm start, so a scripted source writing its own decision
+        // there would behaviour-clone random moves instead of the expert's.
+        if (BehaviourSource.UsesNetwork())
+        {
+            CurrentDecision = brain.Decide(this, target, ResolveAlly());
+            ExpertGeometry = CurrentDecision;
+            HasExpertGeometry = true;
+        }
+        else if (BehaviourSource == BehaviourSource.Rule)
+        {
+            CurrentDecision = ruleBrain.Decide(this, target, ResolveAlly());
+        }
+        else
+        {
+            CurrentDecision = RandomDecision(target, ResolveAlly());
+        }
+
+        DecisionContext = AIDecisionContext.Capture(this, target, ResolveAlly(), CurrentDecision);
         ApplyDecision(CurrentDecision);
         TurnMgr.SubmitMove(this);
+    }
+
+    /// <summary>
+    /// A uniformly random legal move, for the curriculum's easiest opponent.
+    ///
+    /// The MOVE is random but the jump/DI geometry is still taken from the rule-based expert. Sampling
+    /// those four values uniformly too would produce geometry the fighter cannot actually execute, so
+    /// the "random" opponent would spend most of its turns in states no real policy would ever reach -
+    /// and phase 0 would be training against an opponent that is not merely weak but off-distribution.
+    ///
+    /// Randomising the move while keeping the aim means the opponent still pressures the thing phase 0
+    /// is meant to teach: approach and hit confirmation against something that flails.
+    /// </summary>
+    private AIDecision RandomDecision(CharacterController target, CharacterController ally)
+    {
+        var decision = ruleBrain.Decide(this, target, ally);
+
+        if (moveIds == null || moveIds.Length == 0)
+        {
+            decision.rationale = "random (no moves)";
+            return decision;
+        }
+
+        int action = NeuralPolicy.SampleUniform(NeuralPolicy.BuildLegalMask(this, moveIds), behaviourRng);
+        if (action < 0) action = 0;
+        int moveIndex = Mathf.Min(action / 2, moveIds.Length - 1);
+        decision.moveId = moveIds[moveIndex];
+        decision.flipped = (action % 2) == 1;
+        decision.rationale = "random";
+        return decision;
     }
 
     /// <summary>

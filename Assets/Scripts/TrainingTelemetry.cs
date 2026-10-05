@@ -37,7 +37,7 @@ public static class TrainingTelemetry
 
     /// <summary>Header row. Kept in one place so the column order and the writer cannot drift.</summary>
     private const string Header =
-        "match,arena,fighter,role,team,result,turns,frames_turn," +
+        "match,arena,fighter,role,team,result,opponent,is_eval,turns,frames_turn," +
         "damage_dealt_to_enemy,damage_taken,hits_landed,attacks_thrown,whiff_rate," +
         "health_left,reward_last,entropy,entropy_unmasked,legal_action_count," +
         "action_share_top1,updates,turns_recorded," +
@@ -85,11 +85,25 @@ public static class TrainingTelemetry
     /// Per-fighter credit for the enemy's missing health. Only meaningful for the allies; the enemy
     /// row gets its own total, which is the sum of what the allies did to it.
     /// </param>
+    /// <param name="allySource">
+    /// What the ally team was playing this match. Each row records the source of the side OPPOSING it,
+    /// so an ally row gets <paramref name="enemySource"/> and the enemy row gets this. Two parameters
+    /// rather than one because the two sides can be driven by different sources in the same match -
+    /// that is the whole point of the curriculum.
+    /// </param>
+    /// <param name="isEval">
+    /// True for the evaluation slice, where neither side recorded a transition. These are the only rows
+    /// whose win rate measures generalisation rather than training performance, and they are what the
+    /// curriculum's promotion gate reads.
+    /// </param>
     public static void RecordMatch(
         ArenaRunHandle run,
         string result,
         int matchNumber,
-        Dictionary<CharacterController, float> damageToEnemy)
+        Dictionary<CharacterController, float> damageToEnemy,
+        BehaviourSource allySource,
+        BehaviourSource enemySource,
+        bool isEval)
     {
         if (!enabled) return;
         if (string.IsNullOrEmpty(path)) Begin();
@@ -117,6 +131,10 @@ public static class TrainingTelemetry
                       .Append(policy != null ? policy.Role : "rules").Append(',')
                       .Append(f.Team).Append(',')
                       .Append(result).Append(',')
+                      // The source of the side OPPOSING this fighter, so win rates can be grouped by
+                      // opponent without the reader having to know which team a row belongs to.
+                      .Append((f.Team == CombatTeam.Enemy ? enemySource : allySource).Token()).Append(',')
+                      .Append(isEval ? 1 : 0).Append(',')
                       .Append(run.Turns).Append(',')
                       .Append(run.FramesThisTurnLastMatch).Append(',')
                       .Append(Num(cred)).Append(',')

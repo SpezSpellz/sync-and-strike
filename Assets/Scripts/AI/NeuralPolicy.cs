@@ -207,7 +207,16 @@ public class NeuralPolicy : FighterPolicy
         LastScalarValue = new float[ScalarCount];
     }
 
-    private static string[] BuildMoveIds(CharacterController owner)
+    /// <summary>
+    /// The moves this fighter can choose between, in policy-index order.
+    ///
+    /// Public and static because the random behaviour source on <see cref="AIController"/> needs the
+    /// SAME list. It samples over exactly the action space the network was trained on, so a random
+    /// opponent is drawing from the same (move x facing) grid rather than from some looser notion of
+    /// "a random move" - which matters, because a curriculum that graduates into phase 2 is only
+    /// meaningful if the policy has already seen the opponent's action distribution.
+    /// </summary>
+    public static string[] BuildMoveIds(CharacterController owner)
     {
         var list = new List<string>();
         var seen = new HashSet<string>();
@@ -228,15 +237,21 @@ public class NeuralPolicy : FighterPolicy
     public int ActionCount => MoveIds.Length * 2;
 
     /// <summary>1 where the (move, facing) pair is currently performable, 0 otherwise.</summary>
-    public int[] BuildLegalMask(CharacterController self)
+    public int[] BuildLegalMask(CharacterController self) => BuildLegalMask(self, MoveIds);
+
+    /// <summary>
+    /// Legality mask for an arbitrary move list. Shared with <see cref="AIController"/>'s random
+    /// behaviour source so both index the action space identically.
+    /// </summary>
+    public static int[] BuildLegalMask(CharacterController self, string[] moveIds)
     {
-        var mask = new int[ActionCount];
-        for (int i = 0; i < MoveIds.Length; i++)
+        var mask = new int[moveIds.Length * 2];
+        for (int i = 0; i < moveIds.Length; i++)
         {
             int legal = 0;
-            var data = self.Data.HasMove(MoveIds[i]) ? self.Data.GetMove(MoveIds[i]) : null;
+            var data = self.Data.HasMove(moveIds[i]) ? self.Data.GetMove(moveIds[i]) : null;
             if (data != null && self.CanUseMove(data)) legal = 1;
-            if (legal == 0 && MoveIds[i] == "idle") legal = 1; // idle is always performable
+            if (legal == 0 && moveIds[i] == "idle") legal = 1; // idle is always performable
             mask[i * 2] = legal;
             mask[i * 2 + 1] = legal;
         }
@@ -246,6 +261,28 @@ public class NeuralPolicy : FighterPolicy
             mask[0] = 1;
         }
         return mask;
+    }
+
+    /// <summary>
+    /// Uniform draw over the legal entries of a mask.
+    ///
+    /// Not the same as <see cref="SampleFromLogits"/> with flat logits on purpose: this one ignores the
+    /// network entirely, which is the entire point of a random opponent. It is seeded from the
+    /// controller's own RNG so a run stays reproducible under the training seed.
+    /// </summary>
+    public static int SampleUniform(int[] mask, System.Random rng)
+    {
+        int legal = 0;
+        for (int i = 0; i < mask.Length; i++) if (mask[i] != 0) legal++;
+        if (legal <= 0) return NeuralNetwork.FirstLegal(mask);
+        int pick = rng.Next(legal);
+        for (int i = 0; i < mask.Length; i++)
+        {
+            if (mask[i] == 0) continue;
+            if (pick == 0) return i;
+            pick--;
+        }
+        return NeuralNetwork.FirstLegal(mask);
     }
 
     public override AIDecision Decide(CharacterController self, CharacterController target, CharacterController ally)

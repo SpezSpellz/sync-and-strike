@@ -13,13 +13,20 @@ using UnityEngine;
 /// <item><b>companion</b> — trains on the player's own machine from the turn outcome plus the
 /// player's good/bad vote. The vote arrives one step after the reward, so it is applied as a late
 /// adjustment to the previous transition.</item>
-/// <item><b>enemy</b> — trains OFFLINE against the rule-based baseline, then ships frozen: the
-/// trained weights are loaded but <c>learnOnline</c> stays false, so the shipped enemy never
-/// changes while the player is playing.</item>
+/// <item><b>enemy</b> — trains during a <c>-training</c> run and then SHIPS FROZEN: the trained
+/// weights are loaded but <c>learnOnline</c> stays false, so the shipped enemy never changes while a
+/// player is playing.</item>
 /// </list>
 ///
-/// Because both roles share this class, the enemy and the companion can later be trained against
-/// each other (cross-play) with no duplicated training machinery.
+/// Both roles are unfrozen inside a training run, so they learn SIMULTANEOUSLY in the same arena
+/// rather than in separate passes. This note previously claimed the enemy "trains OFFLINE against the
+/// rule-based baseline", which stopped being true well before the curriculum work and is the sort of
+/// stale claim that leads to the next reader hunting for an opponent that does not exist.
+///
+/// Training matches are allocated to ONE role per arena, by index parity, so only one role records per
+/// match; the other side plays an opponent drawn from its own <see cref="OpponentCurriculum"/> — random
+/// or rule-based early on, the live opposing network once that role has earned its way up. See
+/// <see cref="OpponentCurriculum"/> for why that progression is shaped the way it is.
 /// </summary>
 public class PolicyLearner
 {
@@ -189,6 +196,61 @@ public class PolicyLearner
     }
 
     private static readonly Dictionary<int, Session> sessions = new Dictionary<int, Session>();
+
+    /// <summary>
+    /// Opponent curriculum per role. Created eagerly for both roles so the runner never has to ask
+    /// whether one exists, and so a <c>-mix.*</c> override applied before any fighter exists still lands.
+    /// </summary>
+    private static readonly Dictionary<string, OpponentCurriculum> curricula =
+        new Dictionary<string, OpponentCurriculum>();
+
+    static PolicyLearner()
+    {
+        curricula[RoleCompanion] = new OpponentCurriculum(RoleCompanion, 20250101);
+        curricula[RoleEnemy] = new OpponentCurriculum(RoleEnemy, 20250102);
+    }
+
+    /// <summary>The curriculum for a role, or null for an unknown role.</summary>
+    public static OpponentCurriculum CurriculumFor(string role) =>
+        role != null && curricula.TryGetValue(role, out var c) ? c : null;
+
+    /// <summary>Every curriculum, for the run banner and the console health line.</summary>
+    public static IEnumerable<OpponentCurriculum> Curricula => curricula.Values;
+
+    /// <summary>
+    /// True while a role is still cloning the rule-based expert.
+    ///
+    /// The training runner must force the OPPOSING side onto the rule brain while this is true. Warm
+    /// start needs both fighters playing their own experts: the learner to produce clone targets, and
+    /// the opponent because a scripted opponent would otherwise overwrite the learner-side expert
+    /// geometry that the clone reads.
+    /// </summary>
+    public static bool IsWarmingUp(string role)
+    {
+        foreach (var kv in sessions)
+            if (kv.Value.role == role && kv.Value.warmStart) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Apply a <c>-mix.name=value</c> override to every role's curriculum.
+    ///
+    /// Applied to all roles at once rather than per role because a sweep wants to change the shape of the
+    /// curriculum, not one side of it; a per-role variant would make the two roles' curricula diverge and
+    /// the promotion gates would then be measuring different things on each side.
+    /// </summary>
+    public static bool TrySetMix(string field, float value)
+    {
+        bool any = false;
+        foreach (var c in curricula.Values)
+        {
+            if (!c.TrySetMix(field, value)) continue;
+            any = true;
+            Debug.Log($"[Training] mix override applied to {c.Role}: {field} = {value} ({c.DescribeShares()}).");
+        }
+        if (!any) Debug.LogWarning($"[Training] unknown mix field '{field}'; ignored.");
+        return any;
+    }
 
     /// <summary>
     /// Optional observation normalisation, per role.
@@ -433,9 +495,21 @@ public class PolicyLearner
         turnMgr.TurnResolved += () => OnTurnResolved(key);
 
         // Index this session by role so a later fighter asking for the same role joins THIS network
-        // instead of creating a rival one that would overwrite the same weights file. Only the
-        // companion role is shared; a second enemy would be a genuinely different fighter.
-        if (role == RoleCompanion) sessionRoleIndex[role] = key;
+        // instead of creating a rival one that would overwrite the same weights file.
+        //
+        // This used to apply to the COMPANION role only, on the reasoning that a second enemy would be
+        // a genuinely different fighter. That reasoning holds in the shipped game, where there is
+        // exactly one enemy - but it is wrong for a training run, where every arena builds its own
+        // enemy. The consequence was that N arenas produced N separate enemy networks, each with its
+        // own rollout buffer, all training independently and all writing enemy_policy.json on their own
+        // schedule: whichever saved last silently discarded the other N-1, and every enemy the run
+        // reported on was a different, partially-trained policy. BrainStats() dedupes by role, so the
+        // console showed ONE enemy learner while N existed - a run that looked healthy and was not.
+        //
+        // Sharing by role for both roles is also what the curriculum needs. The curriculum is keyed by
+        // role, so with per-arena enemy networks it would be driving N different difficulties against N
+        // different policies while reporting a single promotion decision.
+        sessionRoleIndex[role] = key;
         if (learnOnline)
         {
             // Only the online companion is scored by the player's vote.
@@ -523,6 +597,12 @@ public class PolicyLearner
     public static void NotifyDecision(AIController owner)
     {
         if (!sessions.TryGetValue(owner.GetInstanceID(), out var s)) return;
+
+        // A fighter that is not playing its own network produces no valid sample. This is the ONLY place
+        // recording is gated, because hasPending below is what OnTurnResolved consults to decide whether
+        // to call trainer.Add - so refusing here means the transition is never built, rather than being
+        // built with a log-prob against a distribution the network never sampled from.
+        if (!owner.BehaviourSource.Records()) return;
 
         var p = s.policy;
 

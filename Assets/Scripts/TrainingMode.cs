@@ -55,6 +55,28 @@ public static class TrainingMode
     public static int maxSeconds;
 
     /// <summary>
+    /// One in every N training matches is an EVALUATION match: neither side records a transition, and
+    /// the opponents are fixed (rule-based or random) rather than drawn from the curriculum.
+    ///
+    /// These matches exist because once a curriculum is in play the ordinary win rate stops meaning
+    /// anything - it mixes several opponents with different difficulties, and the role being trained is
+    /// only ever on one side of it. The eval slice is the only uncontaminated measurement available, and
+    /// it is what the promotion gate reads. Without it the gate would advance on in-sample performance.
+    ///
+    /// Costs one match in N. 0 disables the slice, which also disables promotion, since the gate has
+    /// nothing to read.
+    /// </summary>
+    public static int evalEvery = 25;
+
+    /// <summary>
+    /// Turn the opponent curriculum off, so every training match is plain self-play.
+    ///
+    /// Exists so the curriculum can be A/B measured against the previous behaviour without a recompile,
+    /// which is the only way to tell whether it is actually earning the throughput it costs.
+    /// </summary>
+    public static bool curriculum = true;
+
+    /// <summary>
     /// Simulation steps one arena may run per Unity frame while training.
     ///
     /// This is the knob that actually controls throughput. TurnManager drains its simulation backlog
@@ -114,6 +136,15 @@ public static class TrainingMode
         // longer run - and a run that has visibly diverged gets stopped instead of left burning CPU.
         maxMatches = ReadIntArg(args, "-maxMatches");
         maxSeconds = ReadIntArg(args, "-maxSeconds");
+
+        // -evalEvery=N, the evaluation slice size. Read as an int rather than through the float override
+        // path because it is a COUNT, and a fractional match count has no meaning - silently rounding one
+        // down here would quietly disable promotion and leave the curriculum frozen in phase 1.
+        int evalEveryArg = ReadIntArg(args, "-evalEvery");
+        if (evalEveryArg > 0) evalEvery = evalEveryArg;
+
+        curriculum = !Array.Exists(args, a => a == "-noCurriculum");
+        if (!curriculum) evalEvery = 0;
 
         // -simFrames=N, the throughput knob. Clamped because an unbounded value would let one frame
         // simulate indefinitely, which looks like a hang rather than a slow run.

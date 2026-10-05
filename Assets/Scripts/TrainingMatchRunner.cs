@@ -66,6 +66,32 @@ public class TrainingMatchRunner : MonoBehaviour
         public int draws;
 
         /// <summary>
+        /// Which role this arena trains. Derived from the arena index, never from a shared match counter.
+        ///
+        /// Per-arena rather than a global odd/even tally because arenas finish matches at different
+        /// times: a single counter would make "which role was learning here" depend on the order arenas
+        /// happened to complete in, and arenas could drift so that one role held every learner slot.
+        /// Index parity splits evenly by construction and survives any completion order.
+        /// </summary>
+        public bool trainsCompanion;
+
+        /// <summary>What the ally team was playing this match. All three fighters see the same value.</summary>
+        public BehaviourSource allySource = BehaviourSource.Live;
+
+        /// <summary>What the enemy was playing this match.</summary>
+        public BehaviourSource enemySource = BehaviourSource.Live;
+
+        /// <summary>
+        /// True when this match measured rather than trained. Nothing recorded, so nothing was learned
+        /// from it; its only job is to produce an uncontaminated win rate for the curriculum's gate.
+        /// </summary>
+        public bool isEval;
+
+        /// <summary>Which role the eval slice was measuring, and against which fixed opponent.</summary>
+        public string evalRole;
+        public BehaviourSource evalOpponent = BehaviourSource.Rule;
+
+        /// <summary>
         /// Simulated frames the last turn in this match consumed. The single most useful number for
         /// spotting a stalled turn system: a healthy turn finishes in tens of frames, while anything
         /// sitting at TurnManager.maxTurnFrames means some fighter has no completion path.
@@ -89,6 +115,12 @@ public class TrainingMatchRunner : MonoBehaviour
     private readonly List<ArenaRun> pending = new List<ArenaRun>();
 
     private int totalMatches;
+
+    /// <summary>Total matches started across all arenas. Drives the evaluation slice cadence.</summary>
+    private int evalMatches;
+
+    /// <summary>Rotates which (role x opponent) pair the next eval match measures.</summary>
+    private int evalSlot;
 
     private void Start()
     {
@@ -160,6 +192,10 @@ public class TrainingMatchRunner : MonoBehaviour
             else if (key.StartsWith("ppo."))
             {
                 PolicyLearner.TrySetHyper(key.Substring("ppo.".Length), f);
+            }
+            else if (key.StartsWith("mix."))
+            {
+                if (!PolicyLearner.TrySetMix(key.Substring("mix.".Length), f)) continue;
             }
             else
             {
@@ -271,6 +307,10 @@ public class TrainingMatchRunner : MonoBehaviour
 
             SnapshotMatchStart(run);
             runs.Add(run);
+            // Opponents are assigned per arena rather than drawn from a shared counter, so this happens
+            // once and stays fixed for the arena's whole life.
+            run.trainsCompanion = (run.index % 2) == 0;
+            AssignBehaviour(run);
             run.arena.TurnManager.TurnResolved += () => OnMatchEnd(run);
         }
         pending.Clear();
@@ -281,8 +321,17 @@ public class TrainingMatchRunner : MonoBehaviour
                 + "the same GameObject and that fighterPrefab (if set) carries an AIController.");
             return;
         }
+        int companionArenas = 0, enemyArenas = 0;
+        foreach (var r in runs)
+        {
+            if (r.trainsCompanion) companionArenas++; else enemyArenas++;
+        }
         Debug.Log($"TrainingMatchRunner: {runs.Count} arenas, up to {arenaCount} matches in flight "
-            + "(2v1 each).");
+            + $"(2v1 each). Learner split by arena index parity: {companionArenas} train the companion, "
+            + $"{enemyArenas} train the enemy."
+            + (TrainingMode.curriculum
+                ? $" Curriculum on, evaluation slice 1 in {TrainingMode.evalEvery} matches."
+                : " Curriculum OFF (-noCurriculum)."));
     }
 
     /// <summary>
@@ -484,7 +533,9 @@ public class TrainingMatchRunner : MonoBehaviour
         }
 
         totalMatches++;
+        evalMatches++;
         RecordTelemetry(run, result);
+        TickCurricula(run, result);
 
         if (reportEvery <= 1 || totalMatches % reportEvery == 0)
         {
@@ -499,9 +550,22 @@ public class TrainingMatchRunner : MonoBehaviour
         // ResetState reloads each fighter's start-of-match SaveData, so health, position and combo
         // counters all return to the opening state for the next match.
         run.arena.TurnManager.ResetState();
+        // Stamp a new episode onto every brain so GAE does not chain the final states of this match into
+        // the opening states of the next.
+        //
+        // This call was MISSING entirely before the curriculum work. Without it trainer.BeginEpisode()
+        // never ran, CurrentEpisode stayed 0 for the whole process, and every transition carried
+        // episode 0 - so the (agentId, episode) grouping that keeps the two allies' trajectories apart
+        // was silently doing nothing, and GAE discounted each fighter's last turn toward the OTHER
+        // fighter's first turn of the following match. It is exactly the cross-fighter bootstrapping
+        // bug that grouping exists to prevent, just across a match boundary instead of a turn one.
+        PolicyLearner.NotifyMatchReset();
         // Re-snapshot: health was just restored, and the next match's damage credit is measured
         // against this baseline rather than the previous match's starting health.
         SnapshotMatchStart(run);
+        // Next match's opponents. Assigned AFTER the reset so the new sources are in place for the very
+        // first turn of the next match rather than one match late.
+        AssignBehaviour(run);
     }
 
     /// <summary>
@@ -650,7 +714,8 @@ public class TrainingMatchRunner : MonoBehaviour
 
         var handle = new TrainingTelemetry.ArenaRunHandle(
             run.index, run.turns, run.framesLastMatch, () => run.Everyone());
-        TrainingTelemetry.RecordMatch(handle, result.ToString(), totalMatches, credit);
+        TrainingTelemetry.RecordMatch(handle, result.ToString(), totalMatches, credit,
+                                   run.allySource, run.enemySource, run.isEval);
     }
 
     /// <summary>
@@ -664,6 +729,125 @@ public class TrainingMatchRunner : MonoBehaviour
         foreach (var a in run.allies)
             if (a != null) total += a.CombatStats.damageDealt;
         return Mathf.Max(total, enemyLost * 0.0001f, 0.0001f);
+    }
+
+    /// <summary>
+    /// Decide who each side plays in this arena's next match, and push the decision onto the fighters.
+    ///
+    /// Two independent things are decided here, and conflating them is the mistake worth avoiding:
+    ///
+    ///   1. WHICH SIDE LEARNS. Fixed per arena by index parity, not drawn. A random or alternating
+    ///      choice per match would make the two roles' throughput depend on match length and completion
+    ///      order, and the shorter side's brain would end up starved for reasons unrelated to learning.
+    ///
+    ///   2. WHAT EACH SIDE FACES. Drawn from that role's OWN curriculum, so the opponent difficulty a
+    ///      role trains against is the difficulty it has actually earned its way up to, rather than the
+    ///      same global schedule applied to both roles.
+    ///
+    /// The learner side is forced to <see cref="BehaviourSource.Live"/> and never to the curriculum
+    /// draw: a role that was learning against random and then met the live opponent for one match would
+    /// have that match's samples attributed to a distribution it almost never samples from.
+    /// </summary>
+    private void AssignBehaviour(ArenaRun run)
+    {
+        // The learner side always plays itself; the opponent side plays whatever the curriculum says.
+        run.allySource = run.trainsCompanion
+            ? BehaviourSource.Live
+            : (TrainingMode.curriculum ? PolicyLearner.CurriculumFor(PolicyLearner.RoleCompanion).Draw()
+                                       : BehaviourSource.Live);
+        run.enemySource = run.trainsCompanion
+            ? (TrainingMode.curriculum ? PolicyLearner.CurriculumFor(PolicyLearner.RoleEnemy).Draw()
+                                       : BehaviourSource.Live)
+            : BehaviourSource.Live;
+
+        // The evaluation slice. Every Nth match, neither side records and the opponents are fixed, which
+        // is the only way to get a win rate that is not measured on data the policy trained on.
+        //
+        // The evalMatches > 0 guard matters only at startup: AssignBehaviour is called once per arena
+        // during wiring, so with a bare modulo every arena would see 0 % evalEvery == 0 and ALL of them
+        // would open with an evaluation match - burning one match per arena and skewing the first four
+        // slots of the rotation. Requiring one completed match first also makes the slice fire from a
+        // single arena: evalMatches increments once per completion, so exactly the arena that takes the
+        // run past the multiple gets the evaluation match and its peers do not.
+        run.isEval = TrainingMode.curriculum && TrainingMode.evalEvery > 0 && evalMatches > 0
+                     && evalMatches % TrainingMode.evalEvery == 0;
+
+        if (run.isEval)
+        {
+            // Rotate over (role x opponent) so all four curves accumulate at the same rate. Measuring
+            // only the companion's curve would let the enemy's curriculum promote on no evidence at all.
+            evalSlot++;
+            bool evalCompanion = (evalSlot / 2) % 2 == 0;
+            run.evalRole = evalCompanion ? PolicyLearner.RoleCompanion : PolicyLearner.RoleEnemy;
+            run.evalOpponent = (evalSlot % 2) == 0 ? BehaviourSource.Random : BehaviourSource.Rule;
+
+            if (evalCompanion)
+            {
+                run.allySource = BehaviourSource.LiveNoLearn;   // acts for real, records nothing
+                run.enemySource = run.evalOpponent;
+            }
+            else
+            {
+                run.enemySource = BehaviourSource.LiveNoLearn;
+                run.allySource = run.evalOpponent;
+            }
+        }
+        else
+        {
+            run.evalRole = null;
+        }
+
+        // Warm start outranks the curriculum, and it can only do so for the OPPOSING side. The learner
+        // side must stay Live even while warming up, because that is when its clone batches are being
+        // collected - forcing it to Rule would train the critic against a policy that is not the one
+        // about to be used, and would leave both sides on their rule brains with nothing to clone FROM.
+        if (!run.isEval)
+        {
+            if (!run.trainsCompanion && PolicyLearner.IsWarmingUp(PolicyLearner.RoleCompanion))
+                run.allySource = BehaviourSource.Rule;
+            if (run.trainsCompanion && PolicyLearner.IsWarmingUp(PolicyLearner.RoleEnemy))
+                run.enemySource = BehaviourSource.Rule;
+        }
+
+        foreach (var a in run.allies)
+            if (a is AIController ai) ai.SetBehaviourSource(run.allySource);
+        if (run.enemy is AIController enemyAi) enemyAi.SetBehaviourSource(run.enemySource);
+    }
+
+    /// <summary>
+    /// Feed one finished match's outcome into the curriculum's promotion and forgetting gates.
+    ///
+    /// Regress is checked before advance on purpose. Both read the same evaluation windows, so a run of
+    /// unlucky matches can satisfy the advance threshold in the short window while the long window is
+    /// still below the regress threshold; promoting on that reading would move the curriculum to a
+    /// harder opponent at the exact moment the policy looks like it is regressing.
+    /// </summary>
+    private void TickCurricula(ArenaRun run, MatchResult result)
+    {
+        if (!TrainingMode.curriculum || !run.isEval || run.evalRole == null) return;
+
+        bool alliesWon = result == MatchResult.AlliesWin;
+        bool alliesLost = result == MatchResult.AlliesLose;
+
+        // Draws carry no signal about whether the policy is improving, so they are dropped rather than
+        // counted as losses - a stalemate-heavy run would otherwise be demoted for being inconclusive.
+        bool won = alliesWon || alliesLost;
+        if (!won) return;
+
+        var curriculum = PolicyLearner.CurriculumFor(run.evalRole);
+        if (curriculum == null) return;
+
+        bool roleWon = run.evalRole == PolicyLearner.RoleCompanion ? alliesWon : alliesLost;
+        curriculum.RecordEval(run.evalOpponent, roleWon);
+
+        if (curriculum.TickRegress())
+        {
+            Debug.Log($"[Training] Curriculum {run.evalRole}: eval win rate vs rule has fallen below the "
+                      + $"regress threshold; stepping back to {curriculum.DescribeShares()}.");
+            return;
+        }
+        if (curriculum.TickAdvance())
+            Debug.Log($"[Training] Curriculum {run.evalRole}: promoted to {curriculum.DescribeShares()}.");
     }
 
     private void Report()
@@ -711,6 +895,20 @@ public class TrainingMatchRunner : MonoBehaviour
         }
         if (lines.Count == 0) return;
         Debug.Log("[Training] learner: " + string.Join(" | ", lines));
+
+        // Curriculum state on its own line, because it changes on a completely different cadence from
+        // the learner metrics and would otherwise be lost in them. The eval win rates are the only
+        // generalisation signal in the run, so they belong on the console and not only in the CSV.
+        if (!TrainingMode.curriculum)
+        {
+            Debug.Log("[Training] curriculum: OFF (-noCurriculum). Every match is plain self-play.");
+            return;
+        }
+        var curricula = new List<string>();
+        foreach (var c in PolicyLearner.Curricula) curricula.Add(c.ToString());
+        if (curricula.Count > 0)
+            Debug.Log($"[Training] curriculum (eval slice: 1 in {TrainingMode.evalEvery}): "
+                      + string.Join(" | ", curricula));
     }
 
     /// <summary>
