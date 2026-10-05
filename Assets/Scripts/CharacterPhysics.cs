@@ -2,15 +2,11 @@ using UnityEngine;
 
 public class CharacterPhysics : PhysicsCollider
 {
-    [SerializeField]
-    private float rayLength = 0.5f;
-    [SerializeField]
-    private LayerMask ground;
     private CharacterData characterData;
     private float veloX = 0.0f;
     private float veloY = 0.0f;
     private bool isPreview = false;
-    public bool IsGrounded { get; private set; } = true;
+    public bool IsGrounded { get; private set; }
 
     private Arena _arena;
 
@@ -258,7 +254,8 @@ public class CharacterPhysics : PhysicsCollider
     /// <summary>Pins a knocked-down fighter to the floor.</summary>
     public void SnapToGround()
     {
-        setPosition(transform.position.x, FindFloorY() + characterData.height * 0.5f);
+        setPosition(transform.position.x,
+            FindFloorY() + characterData.height * 0.5f + PhysicsConstants.COLLIDER_SKIN);
         ZeroVerticalVelocity();
     }
 
@@ -296,8 +293,12 @@ public class CharacterPhysics : PhysicsCollider
 
     void OnDrawGizmos()
     {
+        var data = characterData != null ? characterData : GetComponent<CharacterData>();
+        if (data == null) return;
+
+        Vector3 feet = transform.position + Vector3.down * (data.height * 0.5f);
         Gizmos.color = Color.red;
-        Gizmos.DrawLine(transform.position, new Vector2(transform.position.x, transform.position.y - rayLength));
+        Gizmos.DrawLine(feet, feet + Vector3.down * GroundContactTolerance);
     }
     /// <param name="blockedByStageWall">
     /// True only when a *vertical* static collider (the stage wall) blocked this fighter. The floor
@@ -371,43 +372,18 @@ public class CharacterPhysics : PhysicsCollider
 
     public void DetectGround()
     {
-        bool grounded = Physics2D.Raycast(transform.position, Vector2.down, rayLength, ground);
-        if (!grounded && veloY <= 0f)
-        {
-            // Fallback for the preview sandbox, which has no Unity rigidbodies to raycast against.
-            grounded = IsGroundedBySweep();
-        }
-        IsGrounded = grounded;
+        IsGrounded = veloY <= 0f && IsTouchingGround();
     }
 
-    /// <summary>How far below the feet the grounding probe reaches.</summary>
-    private const float GroundProbeDepth = 0.06f;
-
-    /// <summary>How far the probe sweeps down per test, within <see cref="GroundProbeDepth"/>.</summary>
-    private const float GroundProbeStep = 0.04f;
+    /// <summary>Collision skin plus a small allowance for floating-point rounding.</summary>
+    private const float GroundContactTolerance = PhysicsConstants.COLLIDER_SKIN + 0.001f;
 
     /// <summary>
-    /// Slack allowed when deciding whether a surface counts as being below the feet. Absorbs the
-    /// COLLIDER_SKIN gap that PhysicsManager leaves when a fighter rests on the floor.
+    /// Uses the same collision boxes as movement, both in the arena and in previews. A surface
+    /// counts only when it is horizontally under the fighter and its top is at the fighter's feet.
+    /// The small tolerance includes the gap left by PhysicsManager's collision skin.
     /// </summary>
-    private const float GroundSurfaceTolerance = 0.05f;
-
-    /// <summary>
-    /// Grounding fallback for the preview sandbox, which has no Unity rigidbodies to raycast
-    /// against. Only a surface genuinely BELOW the fighter counts as ground.
-    ///
-    /// This filtering is essential. A previous version swept against every collider and accepted
-    /// any hit, which broke the ceiling: the probe box overlaps the ceiling, AABB.sweep returns a
-    /// negative distance when the ray starts inside the target's expanded box, and the fighter was
-    /// reported grounded while pressed against the ceiling. Grounded zeroes upward velocity every
-    /// frame, so a straight-up jump that hit the ceiling stuck there permanently and could never
-    /// fall back down.
-    ///
-    /// Two guards fix it: the collider's top surface must be at or below the feet (which also
-    /// excludes the stage walls, whose tops are far above the fighter), and the sweep distance
-    /// must be non-negative, so merely overlapping a surface never counts.
-    /// </summary>
-    private bool IsGroundedBySweep()
+    private bool IsTouchingGround()
     {
         AABB self = getBoundingBox();
         IndexSet<PhysicsCollider> objects = RegisteredObjects();
@@ -421,18 +397,10 @@ public class CharacterPhysics : PhysicsCollider
             AABB box = other.getBoundingBox();
             if (box == null) continue;
 
-            // Only something the fighter could land ON counts, never something above them.
-            if (box.maxY > feetY + GroundSurfaceTolerance) continue;
+            if (self.maxX <= box.minX || self.minX >= box.maxX) continue;
 
-            AABB probe = self.expand(0f, GroundProbeDepth);
-            AABB.RayHit hit = probe.sweep(box, 0f, -GroundProbeStep);
-            if (float.IsNaN(hit.Distance)) continue;
-            if (float.IsInfinity(hit.Distance)) continue;
-            // Negative means the probe already overlaps this surface, so it is a wall or ceiling
-            // pressing on the fighter, not floor beneath them.
-            if (hit.Distance < 0f) continue;
-
-            return true;
+            float gap = feetY - box.maxY;
+            if (Mathf.Abs(gap) <= GroundContactTolerance) return true;
         }
         return false;
     }

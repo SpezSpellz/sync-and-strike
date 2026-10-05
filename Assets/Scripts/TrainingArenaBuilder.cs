@@ -198,8 +198,6 @@ public class TrainingArenaBuilder : MonoBehaviour
         var data = go.GetComponent<CharacterData>();
         var isEnemy = team == CombatTeam.Enemy;
 
-        go.transform.localPosition = new Vector3(x, floorY + 1f, 0f);
-
         if (data != null)
         {
             data.team = team;
@@ -213,6 +211,11 @@ public class TrainingArenaBuilder : MonoBehaviour
             // Never let a spawned training fighter present a rating prompt or a target reference.
             data.isPlayerSide = false;
         }
+
+        // Place the collision box at the floor contact height from the first planning frame.
+        float collisionHeight = data != null ? data.height : fighterHeight;
+        go.transform.localPosition = new Vector3(
+            x, floorY + collisionHeight * 0.5f + PhysicsConstants.COLLIDER_SKIN, 0f);
 
         // Scale BEFORE the controller's Start() runs. TurnManager.RegisterPlayer snapshots
         // p.Save(), which stores localScale, so whatever scale is set here is what the match starts
