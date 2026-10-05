@@ -558,15 +558,27 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Whether the player has chosen this fighter's facing with the Flip button. Once set,
-    /// TurnManager.BeginPlanning stops auto-facing this fighter, so the choice persists across
-    /// turns instead of being reverted at the start of every one.
+    /// Whether the player chose this fighter's facing for the current turn with Flip.
+    /// TurnManager clears the choice when the next planning phase begins.
     /// </summary>
     public bool FacingChosenByPlayer { get; private set; }
 
+    /// <summary>Faces the assigned target unless the player chose a direction for this turn.</summary>
+    public void FaceTarget()
+    {
+        if (FacingChosenByPlayer || TargetPosition == null) return;
+
+        float deltaX = TargetPosition.position.x - transform.position.x;
+        if (Mathf.Abs(deltaX) <= 0.01f) return;
+
+        bool faceLeft = deltaX < 0f;
+        if (faceLeft != IsFlipped) Flip(faceLeft);
+    }
+
+    public void ClearFacingChoice() => FacingChosenByPlayer = false;
+
     /// <summary>
-    /// Flips and records that the player chose this facing. Used by the Flip button; the AI calls
-    /// <see cref="Flip"/> directly so its own decisions never look like a player preference.
+    /// Flips and records a one-turn player choice. The AI calls <see cref="Flip"/> directly.
     /// </summary>
     public void FlipAndRememberFacing(bool flipped)
     {

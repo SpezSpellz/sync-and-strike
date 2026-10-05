@@ -212,14 +212,9 @@ public class TurnManager : MonoBehaviour
             // target transform (the enemy and the companion) kept last turn's SelectedMove.
             player.ResetMove();
 
-            // Auto-face the opponent, but never override a facing the player explicitly chose with
-            // the Flip button, otherwise that choice was reverted at the start of every turn.
-            if (player.TargetPosition != null && !player.FacingChosenByPlayer)
-            {
-                if (player.transform.localPosition.x <= player.TargetPosition.localPosition.x)
-                    player.Flip(false);
-                else player.Flip(true);
-            }
+            // The previous turn's manual Flip expires before showing this turn's previews.
+            player.ClearFacingChoice();
+            player.FaceTarget();
             player.ResetPreviewScale();
 
             // The combo counters, the
