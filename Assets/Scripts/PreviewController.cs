@@ -15,12 +15,12 @@ public class PreviewController : MonoBehaviour
     private float frameTimer;
     /// <summary>Simulated frames since the preview started, used to bound it to one move.</summary>
     private int simulatedFrames;
-    /// <summary>Counts down while the ghost holds still between preview cycles.</summary>
-    private float pauseTimer;
+    private bool cycleComplete;
     private bool active;
     private bool processedEventsThisCycle;
     private CharacterController owner;
     public CharacterController Owner => owner;
+    public bool IsCycleComplete => cycleComplete;
     [HideInInspector] public Arena Arena;
 
     private PreviewPhysicsManager PreviewPhysics => Arena != null ? Arena.PreviewPhysicsManager : PreviewPhysicsManager.Instance;
@@ -35,12 +35,6 @@ public class PreviewController : MonoBehaviour
     /// alive indefinitely no matter what it does.
     /// </summary>
     private const int PREVIEW_MAX_FRAMES = 120;
-
-    /// <summary>
-    /// How long the ghost holds its final pose before the preview replays. Without the pause the
-    /// loop strobes and the eye cannot follow the move.
-    /// </summary>
-    private const float REPLAY_PAUSE_SECONDS = 0.5f;
 
     private void Awake()
     {
@@ -71,7 +65,7 @@ public class PreviewController : MonoBehaviour
         frameIndex = Mathf.Clamp(startFrame, 0, moveData.frames.Length - 1);
         frameTimer = 0f;
         simulatedFrames = 0;
-        pauseTimer = 0f;
+        cycleComplete = false;
         processedEventsThisCycle = false;
         active = true;
         previewRenderer.gameObject.SetActive(true);
@@ -102,14 +96,14 @@ public class PreviewController : MonoBehaviour
             return;
         }
 
-        Preview();
-        PreviewCtl.RegisterPreview(this);
         PreviewPhysics.Register(previewPhysics);
+        PreviewCtl.RegisterPreview(this);
     }
 
     public void StopPreview()
     {
         active = false;
+        cycleComplete = false;
         moveData = null;
         previewRenderer.gameObject.SetActive(false);
         PreviewCtl.UnregisterPreview(this);
@@ -145,16 +139,7 @@ public class PreviewController : MonoBehaviour
 
     public void Step(float deltaTime = 1f / 60f)
     {
-        if (!active || moveData == null) return;
-
-        // Between cycles the ghost holds its final pose, then the move replays from the owner's
-        // position. This is what makes the preview loop.
-        if (pauseTimer > 0f)
-        {
-            pauseTimer -= deltaTime;
-            if (pauseTimer <= 0f) Preview();
-            return;
-        }
+        if (!active || moveData == null || simulatedFrames >= PREVIEW_MAX_FRAMES) return;
 
         // The animation plays for the move's authored length, but physics keeps integrating
         // afterwards so a jump still shows its full arc and landing. Only the move's own force
@@ -190,7 +175,8 @@ public class PreviewController : MonoBehaviour
         SubmitPreviewHurtBox();
         simulatedFrames++;
 
-        // Close the cycle once the move has played out and the ghost has come to rest, then replay.
+        // Report when this move is done, while continuing to simulate until the shared pause.
+        // A later hit from another preview can still knock this ghost around.
         //
         // Re-looping is safe now that each cycle is bounded: the old implementation restarted every
         // 3 seconds via RestartAllPreviews, which reset the ghost to the player and then applied a
@@ -199,8 +185,7 @@ public class PreviewController : MonoBehaviour
         // ghost that never settles, such as one being knocked around by another preview.
         bool settled = previewPhysics.IsGrounded
                        && Mathf.Abs(previewPhysics.getVelocity().x) < PhysicsConstants.GROUND_SETTLE_SPEED;
-        if (animationDone && (settled || simulatedFrames >= PREVIEW_MAX_FRAMES))
-            pauseTimer = REPLAY_PAUSE_SECONDS;
+        cycleComplete = simulatedFrames >= PREVIEW_MAX_FRAMES || (animationDone && settled);
     }
 
     /// <summary>Advances the ghost's sprite one animation frame, holding on the last one.</summary>
@@ -320,6 +305,9 @@ public class PreviewController : MonoBehaviour
     {
         if (knockback == Vector2.zero)
             return;
+
+        // A late hit makes a settled preview unfinished again unless it has reached the hard cap.
+        cycleComplete = simulatedFrames >= PREVIEW_MAX_FRAMES;
 
         Vector2 adjustedKnockback = knockback;
 

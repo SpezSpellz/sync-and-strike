@@ -306,7 +306,6 @@ public class CharacterController : MonoBehaviour
 
     private TurnManager Turn => ArenaFor(this) != null ? ArenaFor(this).TurnManager : TurnManager.Instance;
     private HitboxManager Hitbox => ArenaFor(this) != null ? ArenaFor(this).HitboxManager : HitboxManager.Instance;
-    private PreviewManager PreviewCtl => ArenaFor(this) != null ? ArenaFor(this).PreviewManager : PreviewManager.Instance;
 
     private void Update()
     {
@@ -740,14 +739,12 @@ public class CharacterController : MonoBehaviour
 
     public void ShowMovePreview(AnimationData moveData)
     {
-        PreviewCtl.RestartAllPreviews();
         previewController?.StopPreview();
         previewController?.StartPreview(moveData, this);
     }
 
     public void ResumePreview()
     {
-        PreviewCtl.RestartAllPreviews();
         previewController?.StopPreview();
         if (anim.HasActiveMove)
         {
