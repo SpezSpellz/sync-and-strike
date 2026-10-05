@@ -157,7 +157,7 @@ public abstract class AIController : CharacterController
     /// </summary>
     protected void ApplyDecision(AIDecision decision)
     {
-        Flip(decision.flipped);
+        SetFacingLeft(decision.flipped);
 
         // Committed values (previewOnly = false) so the executed move uses them.
         setKnockbackInfo(decision.diPower, decision.diAngle, false);

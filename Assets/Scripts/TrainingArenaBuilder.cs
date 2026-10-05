@@ -229,9 +229,9 @@ public class TrainingArenaBuilder : MonoBehaviour
     /// left-facing fighter.
     ///
     /// This is not only about size. In this game the root X scale IS the facing flag:
-    /// CharacterPhysics.getFacing() reads `localScale.x > 0`, CharacterController.IsFlipped reads
-    /// `localScale.x < 0`, and Flip() negates X while preserving Math.Abs(X). So scale and facing
-    /// are the same value and have to be written together.
+    /// CharacterPhysics.getFacing() reads `localScale.x > 0`, while
+    /// CharacterController.IsFacingLeft reads `localScale.x < 0`. SetFacingLeft() negates X while
+    /// preserving Math.Abs(X), so scale and facing are the same value and change together.
     ///
     /// The authored fighters use 3 (Enemy uses -3). The previous code derived a scale from
     /// sprite.bounds.size.y, which is the whole 128px atlas CELL rather than the character inside

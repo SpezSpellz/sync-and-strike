@@ -213,8 +213,7 @@ public class TurnManager : MonoBehaviour
             player.ResetMove();
 
             // The previous turn's manual Flip expires before showing this turn's previews.
-            player.ClearFacingChoice();
-            player.FaceTarget();
+            player.ResumeAutomaticFacing();
             player.ResetPreviewScale();
 
             // The combo counters, the

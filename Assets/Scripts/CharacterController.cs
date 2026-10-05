@@ -429,7 +429,7 @@ public class CharacterController : MonoBehaviour
         physics.ClearPushback();
         // A match reset returns everyone to their start, so any facing preference the player set
         // no longer applies and auto-facing should resume.
-        FacingChosenByPlayer = false;
+        HasPlayerFacingOverride = false;
         PreviewScale = transform.localScale;
         stateMachine?.Change(new IdleState(this));
         physics.DetectGround();
@@ -535,59 +535,58 @@ public class CharacterController : MonoBehaviour
     public void SelectMove(string moveId) => TrySelectMove(moveId);
 
     /// <summary>
-    /// Orients the fighter. <paramref name="flipped"/> means facing left.
+    /// Sets the fighter's facing. <paramref name="faceLeft"/> is true for left and false for right.
     ///
-    /// PreviewScale is derived from transform.localScale here rather than tracked as an
-    /// independent value. They used to be two separate writes with nothing keeping them equal, so
-    /// they could drift apart: the Flip toggle reads PreviewScale while the sprite uses
-    /// localScale, and the toggle would then report the opposite of what is on screen.
+    /// The preview uses the fighter's scale magnitude and the requested direction.
     ///
-    /// <paramref name="previewOnly"/> flips just the preview ghost, leaving the real sprite alone.
+    /// <paramref name="previewOnly"/> changes just the preview ghost, leaving the fighter alone.
     /// That is what the enemy's read-only mirror panel uses.
     /// </summary>
-    public void Flip(bool flipped, bool previewOnly = false)
+    public void SetFacingLeft(bool faceLeft, bool previewOnly = false)
     {
-        if (!previewOnly && flipped != (transform.localScale.x < 0f))
+        if (!previewOnly && faceLeft != IsFacingLeft)
             transform.localScale = new Vector3(-transform.localScale.x, transform.localScale.y, transform.localScale.z);
 
         float magnitude = Mathf.Abs(transform.localScale.x);
         PreviewScale = new Vector3(
-            flipped ? -magnitude : magnitude,
+            faceLeft ? -magnitude : magnitude,
             transform.localScale.y,
             transform.localScale.z);
     }
 
     /// <summary>
-    /// Whether the player chose this fighter's facing for the current turn with Flip.
-    /// TurnManager clears the choice when the next planning phase begins.
+    /// Whether the player reversed the fighter's facing with Flip this turn.
     /// </summary>
-    public bool FacingChosenByPlayer { get; private set; }
+    public bool HasPlayerFacingOverride { get; private set; }
 
-    /// <summary>Faces the assigned target unless the player chose a direction for this turn.</summary>
+    /// <summary>Faces the assigned target unless the player used Flip this turn.</summary>
     public void FaceTarget()
     {
-        if (FacingChosenByPlayer || TargetPosition == null) return;
+        if (HasPlayerFacingOverride || TargetPosition == null) return;
 
         float deltaX = TargetPosition.position.x - transform.position.x;
         if (Mathf.Abs(deltaX) <= 0.01f) return;
 
         bool faceLeft = deltaX < 0f;
-        if (faceLeft != IsFlipped) Flip(faceLeft);
+        if (faceLeft != IsFacingLeft) SetFacingLeft(faceLeft);
     }
 
-    public void ClearFacingChoice() => FacingChosenByPlayer = false;
-
-    /// <summary>
-    /// Flips and records a one-turn player choice. The AI calls <see cref="Flip"/> directly.
-    /// </summary>
-    public void FlipAndRememberFacing(bool flipped)
+    /// <summary>Ends the player's Flip choice and faces the target again.</summary>
+    public void ResumeAutomaticFacing()
     {
-        Flip(flipped);
-        FacingChosenByPlayer = true;
+        HasPlayerFacingOverride = false;
+        FaceTarget();
+    }
+
+    /// <summary>Reverses the current facing and keeps that choice until the next turn.</summary>
+    public void ReverseFacingForThisTurn()
+    {
+        SetFacingLeft(!IsFacingLeft);
+        HasPlayerFacingOverride = true;
     }
 
     /// <summary>True when this fighter is facing left, i.e. its sprite x-scale is negative.</summary>
-    public bool IsFlipped => transform.localScale.x < 0f;
+    public bool IsFacingLeft => transform.localScale.x < 0f;
 
     public HurtBox getHurtBox()
     {
