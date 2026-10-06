@@ -149,7 +149,10 @@ public class TrainingArenaBuilder : MonoBehaviour
             camGo.transform.SetParent(root.transform, false);
             // TrainingCamera carries [RequireComponent(typeof(Camera))], so the camera comes with it.
             var cam = camGo.AddComponent<TrainingCamera>();
-            cam.targets = new[] { player, companion, foe };
+            cam.FrameStage(wallX + wallThickness,
+                           floorY - floorThickness,
+                           floorY,
+                           ceilingY + ceilingThickness);
         }
 
         return arena;

@@ -35,9 +35,8 @@ public class CameraFollow : MonoBehaviour
     [Tooltip("20px ~= 0.4 units of slack past the walls.")]
     private float stagePadding = 0.4f;
 
-    [Tooltip("Fixed floor position measured down from the top of the screen. 0.82 leaves room for the bottom UI.")]
-    [Range(0f, 1f)]
-    private float groundScreenFraction = 0.55f;
+    /// <summary>Floor height as a fraction of the screen measured down from the top.</summary>
+    public const float GroundScreenFraction = 0.55f;
 
     [Header("Stage bounds (0 = auto-detect from the wall colliders)")]
     private float minX = 0f;
@@ -116,7 +115,7 @@ public class CameraFollow : MonoBehaviour
         // At screen fraction g from the top, the floor is (2g - 1) half-heights
         // below the camera centre. Use the smoothed size to keep it fixed while zooming.
         pos.y = hasFloor && cam.orthographic
-            ? floorY + (2f * groundScreenFraction - 1f) * cam.orthographicSize
+            ? floorY + (2f * GroundScreenFraction - 1f) * cam.orthographicSize
             : Mathf.Lerp(pos.y, target.y, followLerp);
 
         pos = ClampToStage(pos);
@@ -140,7 +139,7 @@ public class CameraFollow : MonoBehaviour
         if (!hasFloor && ceilingY > floorY)
         {
             // Preserve the old vertical clamp when a floor cannot be detected.
-            float minY = floorY - groundScreenFraction * 2f * halfH;
+            float minY = floorY - GroundScreenFraction * 2f * halfH;
             float maxY = ceilingY + stagePadding - halfH;
             pos.y = maxY > minY ? Mathf.Clamp(pos.y, minY, maxY) : (floorY + ceilingY) * 0.5f;
         }
