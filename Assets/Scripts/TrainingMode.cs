@@ -65,8 +65,15 @@ public static class TrainingMode
     ///
     /// Costs one match in N. 0 disables the slice, which also disables promotion, since the gate has
     /// nothing to read.
+    ///
+    /// N sets how long the curriculum takes to promote, and the coupling is easy to get wrong. The
+    /// slice rotates over 4 (role x opponent) pairs, so each pair collects one graded sample every
+    /// 4 x evalEvery matches. At 25 that was one sample per 100 matches, which against a 50-sample gate
+    /// needed 5,000 matches to promote - so a real 748-match run advanced zero times and the opponent
+    /// mix never left 100% random. At 8 a role reaches the 16-sample gate in roughly 512 matches.
+    /// Keep evalEvery and OpponentCurriculum's advanceWindow in step when either is changed.
     /// </summary>
-    public static int evalEvery = 25;
+    public static int evalEvery = 8;
 
     /// <summary>
     /// Turn the opponent curriculum off, so every training match is plain self-play.

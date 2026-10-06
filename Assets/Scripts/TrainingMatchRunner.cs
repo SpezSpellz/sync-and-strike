@@ -332,6 +332,12 @@ public class TrainingMatchRunner : MonoBehaviour
             + (TrainingMode.curriculum
                 ? $" Curriculum on, evaluation slice 1 in {TrainingMode.evalEvery} matches."
                 : " Curriculum OFF (-noCurriculum)."));
+        // Logged once, not per arena. The stage is invisible in every number the run reports, so if it
+        // ever drifts from the shipped scene again this line is the only thing that would say so.
+        // Resolved rather than passed in: WireArenas is a separate phase from RunTraining, and the builder
+        // is the only thing that knows the stage geometry.
+        var stageBuilder = GetComponent<TrainingArenaBuilder>();
+        if (stageBuilder != null) Debug.Log($"[Training] stage: {stageBuilder.StageSummary()}");
     }
 
     /// <summary>
@@ -381,63 +387,87 @@ public class TrainingMatchRunner : MonoBehaviour
     }
 
     /// <summary>
-    /// Point the HUD health bars at the fighters that are actually fighting.
+    /// Point every HUD health bar at ONE arena's three fighters, matched by role.
     ///
-    /// The bars are scene objects with SERIALIZED owner references to the original player and enemy,
-    /// and the fighters that fight are clones spawned per arena. Once the originals are deactivated the
-    /// bars keep reading their untouched CharacterData and stay full, so only the companion's bar moved -
-    /// it is the one bar that re-resolves through TurnManager at runtime. This is presentation only: it
-    /// has no effect on damage, rewards or telemetry.
+    /// This is presentation only - it has no effect on damage, rewards or telemetry - but it was badly
+    /// wrong, and in a way that read as a game bug rather than a UI bug.
     ///
-    /// Matched by TEAM rather than by slot, because there is no single "the" player fighter once arenas
-    /// exist. The team is read from the bar's CURRENT owner, which is still the original fighter at this
-    /// point - that is the whole reason we can tell which bar is which. Where no owner is set the bar's
-    /// name is used as a fallback.
+    /// It used to infer each bar's team from <c>bar.name</c>, which is the HealthBar GameObject's own
+    /// name: the inner fill rectangle, called "Inner". The actual bar containers are "Left Health",
+    /// "Right Health" and "Companion Health". So the enemy bar never matched "Enemy" and fell through to
+    /// the player branch, and both unbound bars were then handed the same deterministically-chosen ally.
+    /// Two HUD bars were pointing at one fighter, which is why every health bar appeared to move in
+    /// lockstep. (Compounding it, neither of those two bars even had an Owner set - they still use the
+    /// older serialized characterData field - so the name test was the only thing that ran at all.)
+    ///
+    /// Matching by ROLE inside ONE arena fixes both that and a second fault: the companion bar used to
+    /// resolve through TurnManager.Instance, i.e. the last arena created, so it displayed a different
+    /// fight from the other two bars. One arena, three roles, three bars.
+    ///
+    /// The arena chosen is the one the training camera renders, so the HUD and the viewport always agree.
     /// </summary>
     private void RebindHudToArenaFighters()
     {
-        var bars = FindObjectsByType<HealthBar>(FindObjectsSortMode.None);
-        if (bars.Length == 0) return;
+        var builder = GetComponent<TrainingArenaBuilder>();
+        int arenaIndex = builder != null ? builder.renderArenaIndex : 0;
 
+        CharacterController playerFighter = null, companionFighter = null, enemyFighter = null;
+
+        foreach (var a in FindObjectsByType<Arena>(FindObjectsSortMode.None))
+        {
+            if (a == null || a.gameObject.name != $"TrainingArena_{arenaIndex}") continue;
+            foreach (var f in a.GetComponentsInChildren<CharacterController>(true))
+            {
+                // TrainingArenaBuilder names its three fighters, which is what makes a per-slot
+                // binding possible at all. Team cannot do it: BOTH allies are CombatTeam.Player in a
+                // training arena, so a team-based mapping has nothing to distinguish them with.
+                switch (f.name)
+                {
+                    case "Player": playerFighter = f; break;
+                    case "Companion": companionFighter = f; break;
+                    case "Enemy": enemyFighter = f; break;
+                }
+            }
+            break;
+        }
+
+        if (playerFighter == null && enemyFighter == null)
+        {
+            Debug.LogWarning($"[Training] No arena named 'TrainingArena_{arenaIndex}' with the expected "
+                + "Player/Companion/Enemy fighters; leaving the HUD bound to the scene's own bars.");
+            return;
+        }
+
+        // The companion bar is bound through its owner component rather than by scanning, because it is
+        // created at runtime and is the one bar that knows it is the companion bar.
+        var companionUi = FindFirstObjectByType<CompanionHealthBarUI>();
+        if (companionUi != null) companionUi.BindTo(companionFighter);
+
+        var bars = FindObjectsByType<HealthBar>(FindObjectsSortMode.None);
         foreach (var bar in bars)
         {
-            // The companion bar is deliberately left alone: CompanionHealthBarUI resolves it through
-            // TurnManager and re-binds on its own schedule, and stomping it here would race that.
-            if (bar.Owner != null && bar.Owner.Team == CombatTeam.Companion) continue;
-
-            CombatTeam team;
-            if (bar.Owner != null) team = bar.Owner.Team;
-            else if (bar.transform.parent != null && bar.name.IndexOf("Enemy", StringComparison.OrdinalIgnoreCase) >= 0)
-                team = CombatTeam.Enemy;
-            else team = CombatTeam.Player;
-
-            var fighter = LatestArenaFighter(team);
-            if (fighter != null) bar.Bind(fighter);
+            if (companionUi != null && bar == companionUi.Bar) continue;
+            // Structural, not name-based: the enemy bar is anchored to the right edge of the canvas and
+            // the player bar to the left. CompanionHealthBarUI already relies on this same convention to
+            // find the bar it clones, so it is the established discriminator in this HUD.
+            var target = IsRightAnchored(bar) ? enemyFighter : playerFighter;
+            if (target != null) bar.Bind(target);
         }
+
+        Debug.Log($"[Training] HUD bound to arena {arenaIndex}: "
+            + $"player={playerFighter?.name ?? "none"}, "
+            + $"companion={companionFighter?.name ?? "none"}, "
+            + $"enemy={enemyFighter?.name ?? "none"}.");
     }
 
     /// <summary>
-    /// A fighter on the given team belonging to an arena, choosing the lowest instance id so the choice
-    /// is STABLE across calls.
-    ///
-    /// Stability matters more than recency here. A single HUD bar cannot represent N simultaneous
-    /// arenas, so this deliberately picks one deterministically instead of following whichever arena
-    /// happened to act last - a bar that jumped between arenas every turn would be unreadable. The
-    /// consequence is that the HUD shows one arena's fighters while the others run unwatched; the
-    /// training CSV remains the per-arena record.
+    /// True when a bar hangs off the right edge of the canvas, i.e. it is the enemy bar.
     /// </summary>
-    private CharacterController LatestArenaFighter(CombatTeam team)
+    private static bool IsRightAnchored(HealthBar bar)
     {
-        CharacterController best = null;
-        int bestKey = int.MaxValue;
-        foreach (var f in FindObjectsByType<CharacterController>(FindObjectsSortMode.None))
-        {
-            if (f == null || f.GetComponentInParent<Arena>() == null) continue;
-            if (f.Data == null || f.Data.team != team) continue;
-            int key = f.GetInstanceID();
-            if (key < bestKey) { best = f; bestKey = key; }
-        }
-        return best;
+        var rect = bar.transform as RectTransform;
+        if (rect == null) return false;
+        return rect.anchorMin.x > 0.5f || rect.anchorMax.x > 0.5f;
     }
 
     /// <summary>
@@ -907,7 +937,9 @@ public class TrainingMatchRunner : MonoBehaviour
         var curricula = new List<string>();
         foreach (var c in PolicyLearner.Curricula) curricula.Add(c.ToString());
         if (curricula.Count > 0)
-            Debug.Log($"[Training] curriculum (eval slice: 1 in {TrainingMode.evalEvery}): "
+            Debug.Log($"[Training] curriculum (eval slice: 1 in {TrainingMode.evalEvery}, "
+                      + $"promote after {PolicyLearner.CurriculumFor(PolicyLearner.RoleCompanion).AdvanceWindow} "
+                      + $"graded evals): "
                       + string.Join(" | ", curricula));
     }
 

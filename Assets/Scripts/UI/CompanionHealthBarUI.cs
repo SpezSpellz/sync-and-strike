@@ -172,6 +172,28 @@ public class CompanionHealthBarUI : MonoBehaviour
         }
     }
 
+    /// <summary>The bar this component created, or null before it has been built.</summary>
+    public HealthBar Bar => healthBar;
+
+    /// <summary>
+    /// Point the companion bar at a specific fighter and stop the automatic rebinding.
+    ///
+    /// Training needs this. <see cref="FindCompanion"/> resolves through
+    /// <c>TurnManager.Instance</c>, which is whichever arena was created LAST - so in an 8-arena run the
+    /// companion bar watched a different fight from the other two HUD bars, and there is no way for this
+    /// component to know which of the arenas the HUD is meant to be showing.
+    ///
+    /// Setting <see cref="bound"/> is the important half. <see cref="Update"/> retries
+    /// <see cref="FindCompanion"/> every frame until it succeeds, so without this it would overwrite the
+    /// chosen fighter on a later frame and silently put the bar back on the wrong arena.
+    /// </summary>
+    public void BindTo(CharacterController fighter)
+    {
+        if (healthBar == null || fighter == null) return;
+        healthBar.Bind(fighter);
+        bound = true;
+    }
+
     private CharacterController FindCompanion()
     {
         // Prefer the registered fighter from TurnManager, then fall back to a scene scan.

@@ -23,13 +23,56 @@ public class TrainingArenaBuilder : MonoBehaviour
     public float arenaSpacing = 30f;
 
     [Header("Stage (world units)")]
-    public float floorY = -1.19f;
-    public float ceilingY = 7.41f;
-    public float wallX = 11.76f;
-    public float stageWidth = 25.02f;
-    public float floorThickness = 0.2f;
+    /// <summary>
+    /// Y of the floor SURFACE, not of the floor collider's centre.
+    ///
+    /// Read off SampleScene's Floor collider, which is centred at -1.1877 and is 0.1953 thick, so the
+    /// surface a fighter actually stands on is -1.09005. The previous -1.1877 was the collider CENTRE,
+    /// which put the training floor about 0.1 lower than the shipped one and changed how high fighters
+    /// spawned and how far they fell.
+    /// </summary>
+    public float floorY = -1.09005f;
+
+    /// <summary>
+    /// Y of the ceiling's UNDERSIDE, not of the ceiling collider's centre.
+    ///
+    /// The authored Ceiling collider is centred at 7.40995 and is 1 unit thick, so the surface that
+    /// stops a jump is at 6.90995. Using the centre instead made the training ceiling half a unit
+    /// higher than the real one, so jumps were tuned against a ceiling that does not exist in the game.
+    /// </summary>
+    public float ceilingY = 6.90995f;
+
+    /// <summary>
+    /// X of the wall collider's CENTRE. The inner face therefore lands at
+    /// <c>wallX - wallThickness/2 = 11.0</c>.
+    ///
+    /// This was previously applied as the INNER FACE, which pushed the training walls 0.755 further out
+    /// per side and made every arena 1.51 units wider than the one that ships - a silent train/serve
+    /// mismatch in fighter spacing, on top of the wall height bug.
+    /// </summary>
+    public float wallX = 11.75569f;
+
+    public float stageWidth = 25.022758f;
+    public float floorThickness = 0.1953f;
     public float ceilingThickness = 1f;
-    public float wallThickness = 1.51f;
+    public float wallThickness = 1.5113791f;
+
+    /// <summary>
+    /// How far the walls extend BELOW the floor surface.
+    ///
+    /// This is the value whose absence caused fighters to fall out of the world. Collision resolves by
+    /// Minkowski-expanding the wall by the fighter's box, so a grounded fighter is only blocked if the
+    /// wall's bottom is within half a fighter height of its body. The walls used to span y [0, 7.41]
+    /// while the floor surface was at -1.19: a grounded fighter's box is y [-1.19, -0.49], the expanded
+    /// wall's bottom was -0.35, and the two never overlapped. The fighter was therefore not blocked by
+    /// the wall at all - it walked off the inner face, ran to the floor's edge and dropped forever.
+    ///
+    /// 3.0 reproduces the authored wall, which spans y [-4.09, 7.91].
+    /// </summary>
+    public float wallOvershoot = 3f;
+
+    /// <summary>How far the walls extend ABOVE the ceiling surface. The authored wall tops out 1.0 above it.</summary>
+    public float wallHeadroom = 1f;
 
     [Header("Fighters")]
     [Tooltip("Health each spawned fighter starts a match with.")]
@@ -104,6 +147,7 @@ public class TrainingArenaBuilder : MonoBehaviour
         arena.Wire(turn, physics, hitbox, previewPhysics, previewHitbox, preview);
 
         BuildStage(root.transform);
+        ValidateStage();
 
         // Two allies on the Player team against one Enemy. NOT arbitrary teams: AreEnemies() returns
         // false whenever either side is Neutral, so Neutral fighters would pass through each other.
@@ -158,6 +202,23 @@ public class TrainingArenaBuilder : MonoBehaviour
         return arena;
     }
 
+    /// <summary>
+    /// One-line description of the built stage, logged once per run.
+    ///
+    /// Exists because the stage is invisible in every number a run reports. Two arenas that differ only
+    /// in wall position train and report identically, so the geometry has to be stated explicitly if it
+    /// is ever going to be noticed disagreeing with the shipped scene.
+    /// </summary>
+    public string StageSummary()
+    {
+        float wallBottom = floorY - wallOvershoot;
+        float wallTop = ceilingY + wallHeadroom;
+        return $"floor surface y={floorY:0.###}, ceiling underside y={ceilingY:0.###}, "
+               + $"walls y=[{wallBottom:0.###}, {wallTop:0.###}] at |x|={wallX:0.###} "
+               + $"(inner face {wallX - wallThickness * 0.5f:0.###}), "
+               + $"floor {stageWidth:0.##} wide";
+    }
+
     private void BuildStage(Transform parent)
     {
         // Floor and ceiling are wide-and-short; walls are narrow-and-tall. PhysicsManager keys the
@@ -166,10 +227,72 @@ public class TrainingArenaBuilder : MonoBehaviour
                   new Vector3(stageWidth, floorThickness, 1f));
         AddStatic(parent, "Ceiling", new Vector2(0f, ceilingY + ceilingThickness * 0.5f),
                   new Vector3(stageWidth, ceilingThickness, 1f));
-        AddStatic(parent, "WallLeft", new Vector2(-wallX - wallThickness * 0.5f, ceilingY * 0.5f),
-                  new Vector3(wallThickness, ceilingY, 1f));
-        AddStatic(parent, "WallRight", new Vector2(wallX + wallThickness * 0.5f, ceilingY * 0.5f),
-                  new Vector3(wallThickness, ceilingY, 1f));
+
+        // The walls span from below the floor surface to above the ceiling surface, rather than being
+        // given a height of their own. Deriving the extent from the two surfaces it has to enclose is
+        // what makes the noclip fix structural: change floorY or ceilingY and the walls follow, so
+        // there is no longer a second number that can silently disagree with them.
+        float wallBottom = floorY - wallOvershoot;
+        float wallTop = ceilingY + wallHeadroom;
+        float wallHeight = wallTop - wallBottom;
+        float wallCenterY = (wallTop + wallBottom) * 0.5f;
+
+        // No thickness subtraction on X: wallX is the collider's centre, matching the authored scene.
+        AddStatic(parent, "WallLeft", new Vector2(-wallX, wallCenterY),
+                  new Vector3(wallThickness, wallHeight, 1f));
+        AddStatic(parent, "WallRight", new Vector2(wallX, wallCenterY),
+                  new Vector3(wallThickness, wallHeight, 1f));
+    }
+
+    /// <summary>
+    /// Assert that the stage actually encloses a fighter, and say which field to fix if it does not.
+    ///
+    /// Exists because the wall bug was invisible from every number the run reported. Matches completed,
+    /// damage was dealt, policies improved - a fighter that fell out of the world simply stopped being
+    /// an obstacle, and nothing about a win rate distinguishes that from a policy that learned to win.
+    /// The only symptom was a visual glitch in a viewport that most training runs do not even render.
+    ///
+    /// Cheap, run once per arena at build time, and it names the offending field rather than asserting a
+    /// bare invariant.
+    /// </summary>
+    private void ValidateStage()
+    {
+        float wallBottom = floorY - wallOvershoot;
+        float wallTop = ceilingY + wallHeadroom;
+        float wallHeight = wallTop - wallBottom;
+        float innerFace = wallX - wallThickness * 0.5f;
+        float floorEdge = stageWidth * 0.5f;
+
+        // The check that matters: a grounded fighter's body must reach into the wall's vertical span.
+        // With no overshoot the walls float entirely above the floor and the fighter walks straight out.
+        if (wallBottom >= floorY)
+        {
+            Debug.LogError($"[Training] Stage is open at the bottom: walls start at y={wallBottom:0.###} "
+                           + $"but the floor surface is y={floorY:0.###}. wallOvershoot must be > 0 - "
+                           + "without it a grounded fighter is not blocked by the wall and falls out of "
+                           + "the world.");
+        }
+
+        if (wallTop <= ceilingY)
+        {
+            Debug.LogError($"[Training] Stage is open at the top: walls end at y={wallTop:0.###} but the "
+                           + $"ceiling surface is y={ceilingY:0.###}. wallHeadroom must be > 0.");
+        }
+
+        // The wall must stand ON the floor. If the inner face is beyond the floor's edge, a fighter
+        // blocked by the wall is standing on nothing and falls as soon as it touches it.
+        if (innerFace <= 0f || innerFace > floorEdge)
+        {
+            Debug.LogError($"[Training] Stage wall inner face at |x|={innerFace:0.###} does not sit on "
+                           + $"the floor, which ends at |x|={floorEdge:0.###}. Adjust wallX or "
+                           + "stageWidth so the wall stands on the floor.");
+        }
+
+        if (wallHeight <= 0f || wallThickness <= 0f)
+        {
+            Debug.LogError("[Training] Stage wall has non-positive size; check wallOvershoot, "
+                           + "wallHeadroom and wallThickness.");
+        }
     }
 
     private void AddStatic(Transform parent, string name, Vector2 pos, Vector3 scale)

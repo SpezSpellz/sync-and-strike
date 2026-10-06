@@ -155,11 +155,22 @@ public sealed class OpponentCurriculum
     // Promotion gates. Advancing needs a high win rate over a SHORT window; regressing needs a low one
     // over a LONG window. The asymmetry is the point - promoting early is cheap to undo, but dropping a
     // phase the policy has genuinely outgrown would cost it real progress, so that takes more evidence.
+    //
+    // SIZES ARE SET AGAINST EVAL DENSITY, and that coupling is the whole subtlety. The eval slice fires
+    // on TrainingMode.evalEvery and its rotation is 4-way (companion/enemy x random/rule), so each
+    // (role, opponent) pair collects ONE graded sample every 4 x evalEvery matches. These windows were
+    // originally 50 and 200 against evalEvery=25, which works out to 5,000 matches to promote and
+    // 32,000 to regress - both far beyond a realistic run, so the curriculum silently never left phase 0
+    // and the opponent mix stayed 100% random for the entire run. Verified against a real run: 748
+    // matches produced 7 graded samples against a threshold of 50.
+    //
+    // At evalEvery=8 these become 512 matches to promote and 2,048 to regress, which is reachable while
+    // still being many times more evidence than a single noisy stretch.
     private float advanceRandomRate = 0.85f;
     private float advanceRuleRate = 0.70f;
     private float regressRuleRate = 0.50f;
-    private int advanceWindow = 50;
-    private int regressWindow = 200;
+    private int advanceWindow = 16;
+    private int regressWindow = 64;
 
     private readonly WinWindow vsRandom;
     private readonly WinWindow vsRule;

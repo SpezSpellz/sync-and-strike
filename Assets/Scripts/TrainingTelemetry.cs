@@ -37,7 +37,7 @@ public static class TrainingTelemetry
 
     /// <summary>Header row. Kept in one place so the column order and the writer cannot drift.</summary>
     private const string Header =
-        "match,arena,fighter,role,team,result,opponent,is_eval,turns,frames_turn," +
+        "match,arena,fighter,role,team,result,opponent,is_eval,is_learner,turns,frames_turn," +
         "damage_dealt_to_enemy,damage_taken,hits_landed,attacks_thrown,whiff_rate," +
         "health_left,reward_last,entropy,entropy_unmasked,legal_action_count," +
         "action_share_top1,updates,turns_recorded," +
@@ -133,8 +133,27 @@ public static class TrainingTelemetry
                       .Append(result).Append(',')
                       // The source of the side OPPOSING this fighter, so win rates can be grouped by
                       // opponent without the reader having to know which team a row belongs to.
-                      .Append((f.Team == CombatTeam.Enemy ? enemySource : allySource).Token()).Append(',')
+                      //
+                      // The team test selects which of the two sources belongs to the OTHER side: an
+                      // ally's opponent is the enemy, so an ally row reads enemySource, and the enemy
+                      // row reads allySource. This was originally inverted, recording each fighter's
+                      // OWN source - which made every learner row read "live" (its own behaviour) and
+                      // made the column useless for measuring win rate against a given opponent.
+                      .Append((f.Team == CombatTeam.Enemy ? allySource : enemySource).Token()).Append(',')
                       .Append(isEval ? 1 : 0).Append(',')
+                      // Whether THIS fighter was producing training samples this match.
+                      //
+                      // Reads straight off the behaviour source rather than being passed in, because
+                      // BehaviourSource.Live is already the exact definition of "recording". Deriving it
+                      // keeps the two from ever disagreeing.
+                      //
+                      // This column exists because the alternative is genuinely misleading: every fighter
+                      // gets a row in every match, including the ones acting from a scripted source, so
+                      // `role` + `opponent` alone cannot distinguish a policy that played from one that
+                      // was a sparring partner. Reading "companion vs live" as a companion result
+                      // attributes scripted-random wins to the learned companion. Without this column the
+                      // only way to recover the learner rows is to infer it from arena parity.
+                      .Append(ai != null && ai.BehaviourSource.Records() ? 1 : 0).Append(',')
                       .Append(run.Turns).Append(',')
                       .Append(run.FramesThisTurnLastMatch).Append(',')
                       .Append(Num(cred)).Append(',')

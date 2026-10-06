@@ -1028,7 +1028,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6355790e987d6b547889b440f6266934, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainingMatchRunner
-  arenaCount: 1
+  arenaCount: 8
   maxMatchTurns: 400
   winBonus: 20
   lossPenalty: -20
@@ -1049,13 +1049,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainingArenaBuilder
   arenaSpacing: 30
-  floorY: -1.19
-  ceilingY: 7.41
-  wallX: 11.76
-  stageWidth: 25.02
-  floorThickness: 0.2
+  floorY: -1.09005
+  ceilingY: 6.90995
+  wallX: 11.75569
+  stageWidth: 25.022758
+  floorThickness: 0.1953
   ceilingThickness: 1
-  wallThickness: 1.51
+  wallThickness: 1.5113791
+  wallOvershoot: 3
+  wallHeadroom: 1
   fighterHealth: 100
   fighterWidth: 0.5
   fighterHeight: 0.7
