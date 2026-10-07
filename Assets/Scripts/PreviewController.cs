@@ -41,12 +41,35 @@ public class PreviewController : MonoBehaviour
         previewPhysics = GetComponent<CharacterPhysics>();
         previewPhysics.skipPhysicsManagerRegistration = true;
         Arena = GetComponentInParent<Arena>();
+
+        // Initialise the preview body HERE, in Awake, rather than waiting for
+        // CharacterController.Start() to call Initialize().
+        //
+        // PreviewManager.Update() steps every registered preview directly, and a preview registers
+        // itself in StartPreview() - which the move-selection UI can call BEFORE the owner's Start()
+        // runs (Unity runs Update before Start on a freshly created object, and OnEnable ->
+        // ResumePreview -> StartPreview fires first of all). A training rig makes it worse: the
+        // spawned fighter's preview can be stepped on the frame it exists, long before Start.
+        //
+        // Until the body was initialised its characterData was null, so DetectGround ->
+        // IsTouchingGround -> CollidesWith dereferenced it and threw a NullReferenceException on
+        // every polled frame. It also gave the ghost a null bounding box, so it could not collide
+        // with the floor at all.
+        //
+        // Read the data straight off the CharacterData component rather than through the controller,
+        // because Awake order between components is not guaranteed and the controller's own Awake may
+        // not have run yet.
+        var ownerData = GetComponentInParent<CharacterData>();
+        if (ownerData != null) previewPhysics.Initialize(ownerData, true);
     }
 
     public void Initialize(CharacterData characterData)
     {
         data = characterData;
+        // Re-initialising is harmless and idempotent (Awake already did it); keeping it here means a
+        // fighter that is reused with different CharacterData still gets the right box size.
         previewPhysics.Initialize(characterData, true);
+        if (previewRenderer == null) return;
         previewRenderer.color = new Color(0f, 0f, 0f, 0.35f);
         previewRenderer.gameObject.SetActive(true);
         transform.SetParent(null);

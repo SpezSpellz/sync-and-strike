@@ -28,7 +28,6 @@ public class NeuralPolicy : FighterPolicy
     public int LastAction { get; private set; }
     public float LastLogProb { get; private set; }
     public float LastValue { get; private set; }
-    public int LastExpertAction { get; private set; }
     public float LastSelfHealth { get; private set; }
     public float LastTargetHealth { get; private set; }
 
@@ -66,9 +65,6 @@ public class NeuralPolicy : FighterPolicy
         if (index < 0 || index >= ScalarCount) return 0f;
         return Mathf.Exp(net.ScalarLogSd[index]);
     }
-
-    /// <summary>When true the rule-based move is used instead of the sampled one (warm start).</summary>
-    public bool ForceExpert { get; set; }
 
     // --- Telemetry -----------------------------------------------------------
     //
@@ -287,18 +283,14 @@ public class NeuralPolicy : FighterPolicy
 
     public override AIDecision Decide(CharacterController self, CharacterController target, CharacterController ally)
     {
-        // The rule brain supplies the jump/DI geometry and, during warm start, the expert move.
-        var expert = helper.Decide(self, target, ally);
-
         // RAW observation: the capture-time-scaled but otherwise un-normalised vector. This is what gets
         // stored on LastObs and handed to the trainer, so the rollout buffer holds exactly what the
         // network saw and PPO's stored-vs-recomputed log-prob comparison stays valid.
         var rawObs = AIDecisionContext.Capture(self, target, ally, default).ToFeatureVector();
 
-        // Statistics are updated from the raw vector only, and never during warm start: the expert is
-        // driving then, so its state distribution is not the policy's own, and folding it in would leave
-        // the policy normalising against a distribution it never visits.
-        if (!ForceExpert) PolicyLearner.Normalizer.Observe(Role, rawObs);
+        // Statistics are updated from the raw vector only, so they describe the distribution the policy
+        // itself is visiting.
+        PolicyLearner.Normalizer.Observe(Role, rawObs);
 
         // The vector actually fed to the network. Equal to rawObs when normalisation is off or not yet
         // trustworthy, so this is a no-op in the default configuration.
@@ -309,9 +301,6 @@ public class NeuralPolicy : FighterPolicy
         LastSelfHealth = self.GetHealth();
         LastTargetHealth = target != null ? target.GetHealth() : 0f;
 
-        int expertMove = IndexOfMove(expert.moveId);
-        LastExpertAction = ClampAction(expertMove * 2 + (expert.flipped ? 1 : 0));
-
         net.Forward(obs);
         LastValue = net.Value;
         var rawLogits = net.Logits;
@@ -319,25 +308,13 @@ public class NeuralPolicy : FighterPolicy
         var logits = new float[ActionCount];
         for (int a = 0; a < ActionCount; a++) logits[a] = mask[a] != 0 ? rawLogits[a] : float.NegativeInfinity;
 
-        int action;
-        if (ForceExpert)
-        {
-            action = LastExpertAction;
-        }
-        else
-        {
-            action = SampleFromLogits(logits, mask);
-        }
-        action = ClampAction(action);
+        int action = ClampAction(SampleFromLogits(logits, mask));
         LastAction = action;
 
         // --- Sample the scalars ---
         //
-        // Always drawn, even during warm start, so LastRawZ is valid for the transition. During warm
-        // start the sampled VALUES are discarded in favour of the expert's geometry - but the raw z is
-        // still recorded, because the stored log-prob has to belong to the action that was actually
-        // played. Storing an expert geometry next to a policy log-prob would make the importance ratio
-        // meaningless for the whole buffer.
+        // Always drawn so LastRawZ is valid for the transition; the raw z is what the stored log-prob
+        // describes and it must belong to the action that was actually played.
         SampleScalars();
 
         // Store the log-prob over the FULL (unmasked) categorical PLUS the Gaussian terms, because
@@ -360,30 +337,26 @@ public class NeuralPolicy : FighterPolicy
         // actually pick, so including the illegal ones would understate its real confidence. The
         // UNMASKED entropy and the legal-action count are recorded alongside it because a tight mask
         // can drive the masked entropy to zero on its own, which is indistinguishable from collapse.
-        // During warm start the expert is driving, so the numbers describe the expert's behaviour
-        // rather than the policy's, and are left uncounted.
-        if (!ForceExpert)
-        {
-            int legalCount = 0;
-            for (int i = 0; i < mask.Length; i++) legalCount += mask[i] != 0 ? 1 : 0;
-            TallyAction(action, SoftmaxMasked(logits, mask), Softmax(rawLogits), legalCount);
-        }
+        int legalCount = 0;
+        for (int i = 0; i < mask.Length; i++) legalCount += mask[i] != 0 ? 1 : 0;
+        TallyAction(action, SoftmaxMasked(logits, mask), Softmax(rawLogits), legalCount);
 
-        var decision = expert;
+        // The policy owns both halves of the action: the (move, facing) pair and all four scalars.
+        // Without a scalar head (ScalarCount == 0) the rule brain still supplies jump/DI geometry,
+        // which is the only sane default when the network cannot choose it.
+        var decision = ScalarCount > 0
+            ? new AIDecision
+            {
+                jumpPower = LastScalarValue[ActionScalars.JumpPower],
+                jumpAngle = LastScalarValue[ActionScalars.JumpAngle],
+                diPower = LastScalarValue[ActionScalars.DiPower],
+                diAngle = LastScalarValue[ActionScalars.DiAngle],
+            }
+            : helper.Decide(self, target, ally);
+
         decision.moveId = MoveIds[action / 2];
         decision.flipped = (action % 2) == 1;
-
-        if (!ForceExpert && ScalarCount > 0)
-        {
-            // The policy owns its own aim once warm start is over, so all four scalars come from the
-            // Gaussian heads rather than from the rule-based brain.
-            decision.jumpPower = LastScalarValue[ActionScalars.JumpPower];
-            decision.jumpAngle = LastScalarValue[ActionScalars.JumpAngle];
-            decision.diPower = LastScalarValue[ActionScalars.DiPower];
-            decision.diAngle = LastScalarValue[ActionScalars.DiAngle];
-        }
-
-        decision.rationale = ForceExpert ? "ppo (warm start expert)" : "ppo";
+        decision.rationale = "ppo";
         return decision;
     }
 
@@ -424,12 +397,6 @@ public class NeuralPolicy : FighterPolicy
     {
         var raw = AIDecisionContext.Capture(self, target, ally, default).ToFeatureVector();
         return PolicyLearner.Normalizer.Prepare(Role, raw);
-    }
-
-    private int IndexOfMove(string moveId)
-    {
-        for (int i = 0; i < MoveIds.Length; i++) if (MoveIds[i] == moveId) return i;
-        return 0;
     }
 
     private int ClampAction(int a)

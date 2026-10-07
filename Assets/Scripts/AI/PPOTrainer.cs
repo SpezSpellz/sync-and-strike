@@ -67,7 +67,7 @@ public class PPOTrainer
     /// policy. Adam's scale invariance is what makes this safe - the exact value matters far less than
     /// it would with SGD, because Adam is already rescaling per parameter.
     /// </summary>
-    public float learningRate = 3e-5f;
+    public float learningRate = 1e-4f;   // initial; annealed down to minLearningRate
         public float gamma = 0.99f;
         public float lambda = 0.95f;
 
@@ -167,6 +167,20 @@ public class PPOTrainer
         /// network could never recover. Clipping bounds the step no matter how bad the batch is.
         /// </summary>
         public float maxGradNorm = 0.5f;
+
+        /// <summary>
+        /// Learning-rate schedule, ML-Agents style: the rate decays LINEARLY from <see cref="learningRate"/>
+        /// to <see cref="minLearningRate"/> over the run, so early updates move fast and late ones stay
+        /// stable. Decayed over <see cref="PPOTrainer.UpdateCount"/> (one full PPO update) rather than per
+        /// turn, which keeps the schedule independent of batch size.
+        ///
+        /// The learner previously used a single constant rate tuned while the policy gradient was
+        /// actually broken (wrong sign + shuffle-index mismatch), so that value had been chosen against
+        /// noise. Set <code>linearSchedule=false</code> to recover the constant-rate behaviour for an A/B run.
+        /// </summary>
+        public float minLearningRate = 1e-5f;
+        public bool linearSchedule = true;
+        public int decayUpdates = 4000;
     }
 
     private readonly NeuralNetwork net;
@@ -185,6 +199,20 @@ public class PPOTrainer
 
     public int Buffered => buffer.Count;
     public int UpdateCount { get; private set; }
+
+    /// <summary>
+    /// Learning rate actually used by the most recent update, after the schedule is applied. Logged so
+    /// "the policy stopped moving" can be told apart from "the schedule annealed to its floor".
+    /// </summary>
+    public float CurrentLearningRate { get; private set; }
+
+    /// <summary>The scheduled learning rate for the update that is about to run.</summary>
+    private float ScheduleLearningRate()
+    {
+        if (!hyper.linearSchedule || hyper.decayUpdates <= 0) return hyper.learningRate;
+        float t = Mathf.Clamp01((float)UpdateCount / hyper.decayUpdates);
+        return Mathf.Lerp(hyper.learningRate, hyper.minLearningRate, t);
+    }
 
     /// <summary>Epochs actually run in the last update. Below <see cref="Hyper.epochs"/> means the
     /// KL early stop fired, which is the intended behaviour and not a fault.</summary>
@@ -367,6 +395,7 @@ public class PPOTrainer
     {
         int n = buffer.Count;
         if (n < 2) return;
+        CurrentLearningRate = ScheduleLearningRate();
 
         // Counted at the top, once per call that actually does work. The increment at the end of the
         // method covers the same event, so having both would double-count.
@@ -639,7 +668,7 @@ public class PPOTrainer
                 // the gradient-norm clip apply to the sum and then divided it by count a second time,
                 // shrinking every step by a further factor of `count` and tying step size to minibatch
                 // size. That is why the policy never moved (KL ~1e-6, clip 0, entropy at uniform).
-                net.ApplyGradients(hyper.learningRate, hyper.maxGradNorm, count, hyper.useAdam);
+                net.ApplyGradients(CurrentLearningRate, hyper.maxGradNorm, count, hyper.useAdam);
                 MinibatchesRun++;
                 EpochsRun = epoch + 1;
 

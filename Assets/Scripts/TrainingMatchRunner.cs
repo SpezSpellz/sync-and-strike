@@ -122,6 +122,17 @@ public class TrainingMatchRunner : MonoBehaviour
     /// <summary>Rotates which (role x opponent) pair the next eval match measures.</summary>
     private int evalSlot;
 
+    /// <summary>
+    /// Per-(learner role x opponent x train/eval) W/L/D, so a win rate can be read against a SPECIFIC
+    /// opponent instead of only in aggregate.
+    ///
+    /// A single win rate mixes random, rule and live opponents, which is exactly the ambiguity the
+    /// curriculum exists to remove - a policy can look flat overall while improving against rule and
+    /// regressing against live. Keyed by the learner's role and the source of the side it faced.
+    /// </summary>
+    private class Wl { public int wins, losses, draws; }
+    private readonly Dictionary<string, Wl> wlByOpponent = new Dictionary<string, Wl>();
+
     private void Start()
     {
         if (!TrainingMode.enabled)
@@ -562,6 +573,8 @@ public class TrainingMatchRunner : MonoBehaviour
             run.draws++;
         }
 
+        RecordLearnerResult(run, result);
+
         totalMatches++;
         evalMatches++;
         RecordTelemetry(run, result);
@@ -827,18 +840,6 @@ public class TrainingMatchRunner : MonoBehaviour
             run.evalRole = null;
         }
 
-        // Warm start outranks the curriculum, and it can only do so for the OPPOSING side. The learner
-        // side must stay Live even while warming up, because that is when its clone batches are being
-        // collected - forcing it to Rule would train the critic against a policy that is not the one
-        // about to be used, and would leave both sides on their rule brains with nothing to clone FROM.
-        if (!run.isEval)
-        {
-            if (!run.trainsCompanion && PolicyLearner.IsWarmingUp(PolicyLearner.RoleCompanion))
-                run.allySource = BehaviourSource.Rule;
-            if (run.trainsCompanion && PolicyLearner.IsWarmingUp(PolicyLearner.RoleEnemy))
-                run.enemySource = BehaviourSource.Rule;
-        }
-
         foreach (var a in run.allies)
             if (a is AIController ai) ai.SetBehaviourSource(run.allySource);
         if (run.enemy is AIController enemyAi) enemyAi.SetBehaviourSource(run.enemySource);
@@ -880,6 +881,34 @@ public class TrainingMatchRunner : MonoBehaviour
             Debug.Log($"[Training] Curriculum {run.evalRole}: promoted to {curriculum.DescribeShares()}.");
     }
 
+    /// <summary>Record the learner's result against the opponent it actually faced this match.</summary>
+    private void RecordLearnerResult(ArenaRun run, MatchResult result)
+    {
+        string role;
+        BehaviourSource opponent;
+        if (run.isEval && run.evalRole != null)
+        {
+            role = run.evalRole;
+            opponent = run.evalOpponent;
+        }
+        else
+        {
+            role = run.trainsCompanion ? PolicyLearner.RoleCompanion : PolicyLearner.RoleEnemy;
+            opponent = run.trainsCompanion ? run.enemySource : run.allySource;
+        }
+
+        bool won = role == PolicyLearner.RoleCompanion ? result == MatchResult.AlliesWin
+                                                       : result == MatchResult.AlliesLose;
+        bool lost = role == PolicyLearner.RoleCompanion ? result == MatchResult.AlliesLose
+                                                        : result == MatchResult.AlliesWin;
+
+        string key = $"{role} vs {opponent.Token()}{(run.isEval ? " (eval)" : "")}";
+        if (!wlByOpponent.TryGetValue(key, out var wl)) wlByOpponent[key] = wl = new Wl();
+        if (won) wl.wins++;
+        else if (lost) wl.losses++;
+        else wl.draws++;
+    }
+
     private void Report()
     {
         int wins = 0, losses = 0, draws = 0;
@@ -894,6 +923,14 @@ public class TrainingMatchRunner : MonoBehaviour
         Debug.Log($"Training: {totalMatches} matches. Ally win rate {rate:0.0}% "
             + $"({wins}W/{losses}L, {draws} draws).");
         Debug.Log($"Training policies: {PolicyLearner.Stats()}");
+        foreach (var kv in wlByOpponent)
+        {
+            var wl = kv.Value;
+            float games = wl.wins + wl.losses;
+            float wr = games > 0f ? 100f * wl.wins / games : 0f;
+            Debug.Log($"[Training] win rate {kv.Key}: {wr:0.0}% "
+                + $"({wl.wins}W/{wl.losses}L, {wl.draws} draws).");
+        }
         TrainingTelemetry.LogSnapshot(handles, totalMatches);
     }
 
@@ -913,6 +950,7 @@ public class TrainingMatchRunner : MonoBehaviour
         {
             lines.Add(
                 $"{kv.Key}: updates={kv.Value.updates} buffered={kv.Value.buffered} " +
+                $"lr={kv.Value.learningRate:0.###e+0} " +
                 $"EV={kv.Value.explainedVariance:0.###} kl={kv.Value.approxKl:0.####} " +
                 $"clip={kv.Value.clipFraction:0.###} vloss={kv.Value.valueLoss:0.###} " +
                 $"|A|={kv.Value.advantageMagnitude:0.###} rejected={kv.Value.rejected} "

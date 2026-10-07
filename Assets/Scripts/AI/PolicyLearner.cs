@@ -110,28 +110,9 @@ public class PolicyLearner
         public string role;
         public NeuralNetwork net;
         public PPOTrainer trainer;
-        public bool warmStart = true;
         public int turns = 0;
         public int updates = 0;
         public float lastReward;
-
-        /// <summary>
-        /// Expert samples pending a clone batch. Per brain, not global: a single shared list would mix
-        /// arenas' observations together when several arenas train in one process.
-        /// </summary>
-        public readonly List<float[]> cloneObs = new List<float[]>();
-        public readonly List<int> cloneActions = new List<int>();
-
-        // Expert jump/DI values as RAW z targets for the clone regression. One entry per cloneObs, and a
-        // null entry means "the expert supplied no geometry for this sample", so a policy without scalars
-        // degrades to cloning the move alone instead of failing.
-        public readonly List<float[]> cloneScalarZ = new List<float[]>();
-
-    /// <summary>Monte-Carlo return target per clone sample, for value pretraining. See EstimatedReturn.</summary>
-    public readonly List<float> cloneReturns = new List<float>();
-
-        // Range descriptors for turning an expert gameplay value into a raw z.
-        public ContinuousHead[] cloneHeads;
     }
 
     /// <summary>
@@ -159,40 +140,16 @@ public class PolicyLearner
         /// <summary>Distance to the target when the move was committed, for approach shaping.</summary>
         public float pendingDistance;
 
-        // Convenience passthroughs, so the reward/clone code below reads naturally.
+        // Convenience passthroughs, so the reward code below reads naturally.
         public string role => brain.role;
         public NeuralNetwork net => brain.net;
         public PPOTrainer trainer => brain.trainer;
-        public bool warmStart => brain.warmStart;
 
         /// <summary>Set once a NaN warning has been logged, so it is not repeated every turn.</summary>
         public bool poisonWarned;
         public int turns { get => brain.turns; set => brain.turns = value; }
         public int updates { get => brain.updates; set => brain.updates = value; }
         public float lastReward { get => brain.lastReward; set => brain.lastReward = value; }
-        public List<float[]> cloneObs => brain.cloneObs;
-        public List<int> cloneActions => brain.cloneActions;
-        public List<float[]> cloneScalarZ => brain.cloneScalarZ;
-    public List<float> cloneReturns => brain.cloneReturns;
-
-    /// <summary>
-    /// Running discounted reward sum during warm start, so each expert turn's return reflects
-    /// everything banked so far this match rather than just the latest turn. Used as the critic's
-    /// value-pretraining target.
-    ///
-    /// Per FIGHTER, not per brain - and this is a correction. It used to live on the SharedBrain,
-    /// because keeping it per-fighter was thought to let the two allies overwrite each other's
-    /// trajectory. The opposite happened: BOTH allies accumulate into it every turn, so the target
-    /// the critic regressed onto was the sum of two independent trajectories rather than either one.
-    /// In 2v1 the critic was therefore pretrained to predict roughly TWICE the return it was ever
-    /// asked for, which is a direct explanation for the enormous return and advantage scale measured
-    /// in the last run (return std ~98 against a value std of 6, advantages up to 1e31).
-    ///
-    /// Per fighter is also simply correct: a return belongs to the trajectory that earned it, and
-    /// each fighter has its own.
-    /// </summary>
-    public float warmStartReturn;
-        public ContinuousHead[] cloneHeads { get => brain.cloneHeads; set => brain.cloneHeads = value; }
     }
 
     private static readonly Dictionary<int, Session> sessions = new Dictionary<int, Session>();
@@ -216,21 +173,6 @@ public class PolicyLearner
 
     /// <summary>Every curriculum, for the run banner and the console health line.</summary>
     public static IEnumerable<OpponentCurriculum> Curricula => curricula.Values;
-
-    /// <summary>
-    /// True while a role is still cloning the rule-based expert.
-    ///
-    /// The training runner must force the OPPOSING side onto the rule brain while this is true. Warm
-    /// start needs both fighters playing their own experts: the learner to produce clone targets, and
-    /// the opponent because a scripted opponent would otherwise overwrite the learner-side expert
-    /// geometry that the clone reads.
-    /// </summary>
-    public static bool IsWarmingUp(string role)
-    {
-        foreach (var kv in sessions)
-            if (kv.Value.role == role && kv.Value.warmStart) return true;
-        return false;
-    }
 
     /// <summary>
     /// Apply a <c>-mix.name=value</c> override to every role's curriculum.
@@ -265,10 +207,6 @@ public class PolicyLearner
     /// <summary>The role-level normaliser, exposed for the command line and for tests.</summary>
     public static ObservationNormalizer Normalizer => normalizer;
 
-    // Warm start: for the first N turns the companion plays the rule-based expert and clones it,
-    // so it begins competent rather than random, then PPO takes over.
-    private const int WarmStartTurns = 200;
-    private const int CloneBatchSize = 32;
     private const int SaveEveryUpdates = 25;
     private const int Hidden = 32;
 
@@ -291,7 +229,6 @@ public class PolicyLearner
     // passing -ppo.scalars=0, and so a network trained without scalars can still be loaded and used.
     private static int scalarsPerPolicy = ActionScalars.Count;
     private static int ScalarsPerPolicy => Mathf.Clamp(scalarsPerPolicy, 0, ActionScalars.Count);
-    private const float CloneLearningRate = 1e-3f;
 
     /// <summary>
     /// Roles that ship frozen. A frozen role still loads and uses a trained policy, but records no
@@ -346,6 +283,9 @@ public class PolicyLearner
             case "normalizer": normalizer.enabled = value != 0f; return true;
             case "normalizePersist": normalizer.persist = value != 0f; return true;
             case "learningRate": sharedHyper.learningRate = value; return true;
+            case "minLearningRate": sharedHyper.minLearningRate = value; return true;
+            case "linearSchedule": sharedHyper.linearSchedule = value != 0f; return true;
+            case "decayUpdates": sharedHyper.decayUpdates = Mathf.Max(0, Mathf.RoundToInt(value)); return true;
             case "gamma": sharedHyper.gamma = value; return true;
             case "lambda": sharedHyper.lambda = value; return true;
             case "valueLambda": sharedHyper.valueLambda = Mathf.Clamp01(value); return true;
@@ -373,6 +313,25 @@ public class PolicyLearner
     /// True for the companion (keeps learning on the player's machine). False for the shipped enemy,
     /// which loads trained weights but must never change during play.
     /// </param>
+    /// <summary>Creation counter for deterministic per-policy seeds.</summary>
+    private static int seedCounter;
+
+    /// <summary>
+    /// A deterministic seed for a policy/network created in this process.
+    ///
+    /// Replaces <code>GetInstanceID()</code>, which is not stable across runs or platforms, so "random
+    /// initialisation" was neither reproducible nor controllable. Mixed from the configured run seed, the
+    /// role, and a creation counter, so two arenas' identical roles still get different networks while the
+    /// whole run stays reproducible.
+    /// </summary>
+    private static int NextSeed(string role)
+    {
+        int h = 17;
+        foreach (char c in role) h = unchecked(h * 31 + c);
+        int n = unchecked(seedCounter++);
+        return unchecked((int)(TrainingMode.seed * 2654435761L + h * 40503L + n));
+    }
+
     public static NeuralPolicy CreatePolicy(AIController owner, FighterAI ruleBrain,
                                              string role, bool learnOnline)
     {
@@ -422,12 +381,11 @@ public class PolicyLearner
         if (brain != null)
         {
             // Join an existing brain. A fresh NeuralPolicy over the SHARED network, so this fighter
-            // keeps its own pending transition, and its own warm-start flag mirror below.
+            // keeps its own pending transition.
             var joined = new NeuralPolicy(owner, ruleBrain, brain.net,
-                                          new System.Random(owner.GetInstanceID()), ScalarsPerPolicy);
+                                          new System.Random(NextSeed(role)), ScalarsPerPolicy);
             joined.Trainer = brain.trainer;
             joined.Role = role;
-            joined.ForceExpert = brain.warmStart;
             joined.Turns = brain.turns;
             joined.Updates = brain.updates;
 
@@ -451,7 +409,7 @@ public class PolicyLearner
         var probe = new NeuralPolicy(owner, ruleBrain, new NeuralNetwork(obsSize, Hidden, 2, 1, ScalarsPerPolicy), new System.Random(1));
         int actionCount = probe.ActionCount;
 
-        var net = new NeuralNetwork(obsSize, Hidden, actionCount, owner.GetInstanceID(), ScalarsPerPolicy, ValueHidden);
+        var net = new NeuralNetwork(obsSize, Hidden, actionCount, NextSeed(role), ScalarsPerPolicy, ValueHidden);
         // Weights load whenever they exist, from persistent data or from the build. They used to require
         // the -resume flag, which meant a shipped companion never carried its learning across sessions
         // and a shipped enemy never used its trained policy unless the player passed a training switch.
@@ -467,7 +425,7 @@ public class PolicyLearner
             ? $"[AI] {role} fresh random init (training run with no -resume)."
             : resumed
                 ? $"[AI] {role} loaded {source} weights (max|weight| {net.MaxAbsWeight:0.###})."
-                : $"[AI] {role} has no trained weights; starting from the rule-based warm start.");
+                : $"[AI] {role} has no trained weights; starting from random weights.");
         WarnIfNoPretrainedCompanion(source, role);
 
         // Statistics travel with the weights, and only with the player's own. They describe the input
@@ -476,24 +434,16 @@ public class PolicyLearner
         // start was protecting.
         if (source == WeightSource.Persistent) LoadNormalizerStats(role);
 
-        var trainer = new PPOTrainer(net, sharedHyper, new System.Random(owner.GetInstanceID()));
-        var policy = new NeuralPolicy(owner, ruleBrain, net, new System.Random(owner.GetInstanceID()), ScalarsPerPolicy);
+        var trainer = new PPOTrainer(net, sharedHyper, new System.Random(NextSeed(role)));
+        var policy = new NeuralPolicy(owner, ruleBrain, net, new System.Random(NextSeed(role)), ScalarsPerPolicy);
         policy.Trainer = trainer;
-
-        // A fresh policy that will be trained needs the rule-based warm start, otherwise it starts random
-        // and spends its first turns flailing. But a policy resumed from disk already holds trained
-        // weights, and cloning the expert over it would throw that training away — so a resumed run
-        // goes straight to PPO.
-        bool willLearn = learnOnline || TrainingMode.enabled;
-        bool warmStart = willLearn && !resumed;
-        policy.ForceExpert = warmStart;
 
         var session = new Session
         {
             owner = owner, policy = policy,
             brain = new SharedBrain
             {
-                role = role, net = net, trainer = trainer, warmStart = warmStart,
+                role = role, net = net, trainer = trainer,
             },
         };
         policy.Role = role;
@@ -532,6 +482,7 @@ public class PolicyLearner
     {
         public int updates;
         public int buffered;
+        public float learningRate;
         public float explainedVariance;
         public float approxKl;
         public float clipFraction;
@@ -567,6 +518,7 @@ public class PolicyLearner
             {
                 updates = b.updates,
                 buffered = b.trainer.Buffered,
+                learningRate = b.trainer.CurrentLearningRate,
                 explainedVariance = b.trainer.ExplainedVariance,
                 approxKl = b.trainer.ApproxKl,
                 clipFraction = b.trainer.ClipFraction,
@@ -612,44 +564,10 @@ public class PolicyLearner
         // built with a log-prob against a distribution the network never sampled from.
         if (!owner.BehaviourSource.Records()) return;
 
-        var p = s.policy;
-
-        if (s.warmStart)
-        {
-            // Clone into the SHARED queue. Both allies' expert samples train the one network, which is
-            // what we want, but each fighter contributes its own observations.
-            s.cloneObs.Add(p.LastObs);
-            s.cloneActions.Add(p.LastExpertAction);
-            s.cloneScalarZ.Add(ExpertScalarTargets(s));
-            // Monte-Carlo return target for value pretraining, from arXiv:2503.01491.
-            //
-            // During warm start the expert is playing, so the trajectory's outcome is knowable in closed
-            // form - which is exactly the "train the value model on Monte-Carlo returns under a fixed
-            // policy" recipe the paper prescribes for fixing a collapsed critic. Fitting V before PPO's
-            // first policy update is what stops the critic and the policy gradient from bootstrapping
-            // each other off a bad initialisation.
-            //
-            // Recorded here, at DECISION time, on the expert's chosen action. The turn's reward is not
-            // known until OnTurnResolved, so the running sum is advanced there instead; see
-            // AccumulateWarmStartReturn.
-            s.cloneReturns.Add(s.warmStartReturn);
-            if (s.cloneObs.Count >= CloneBatchSize)
-            {
-                CloneBatch(s);
-                s.cloneObs.Clear();
-                s.cloneActions.Clear();
-                s.cloneScalarZ.Clear();
-                s.cloneReturns.Clear();
-            }
-            s.hasPending = true;
-            s.pendingSelfHealth = p.LastSelfHealth;
-            s.pendingTargetHealth = p.LastTargetHealth;
-            s.pendingDistance = DistanceToTarget(owner);
-            return;
-        }
-
         // A frozen policy is observation-only: it never records or learns, it just fights.
         if (!IsLearning(s.role)) return;
+
+        var p = s.policy;
 
         // Apply any pending PPO update now, after the previous turn's vote has been folded in.
         // Guarded on the brain's counter, not this fighter's, so two fighters sharing a network do
@@ -716,15 +634,9 @@ public class PolicyLearner
         // Stalemate penalty: a turn that dealt no damage AND gained no ground was a wasted turn.
         // Applied only on non-terminal turns. When the match is resolving on its own terms the
         // outcome is already unambiguous, and charging for the final turn of a lost fight adds noise
-        // to the return instead of signal. Also skipped while the expert is driving, since the
-        // expert does not stall and the penalty would just offset every warm-start reward.
-        if (!done && !s.warmStart && dmgDealt <= 0f && closed <= 0f)
+        // to the return instead of signal.
+        if (!done && dmgDealt <= 0f && closed <= 0f)
             reward -= rewardConfig.stalemate;
-
-        // Value pretraining: fold this turn's reward into the running Monte-Carlo return that the
-        // clone batches regress the critic against. Warm start only, because after it the trajectories
-        // are the LEARNER's and their outcomes are not knowable in closed form.
-        if (s.warmStart) AccumulateWarmStartReturn(s, reward);
 
         var nextObs = s.policy.CaptureObservation(self, target, ally);
         // The raw scalar samples ride along with the transition. Cloned rather than referenced, because
@@ -745,15 +657,6 @@ public class PolicyLearner
         s.policy.Turns = s.turns;
         s.policy.Updates = s.updates;
 
-        // Warm start is a property of the BRAIN, so when it ends, every fighter using this network
-        // must stop deferring to its own expert. Only this fighter's policy is reachable here, so the
-        // others are swept below.
-        if (s.warmStart && s.turns >= WarmStartTurns)
-        {
-            s.brain.warmStart = false;
-            EndWarmStartForRole(s.role);
-        }
-
         // A training run must not stop at the turn cap of a single match: keep the weights current
         // so a long headless run keeps improving instead of holding whatever it had at match one.
         if (TrainingMode.enabled && s.trainer.ReadyToUpdate())
@@ -764,42 +667,6 @@ public class PolicyLearner
         }
     }
 
-    /// <summary>
-    /// Stop every fighter on <paramref name="role"/> deferring to its rule-based expert.
-    ///
-    /// Warm start ends per BRAIN, but each fighter owns a separate NeuralPolicy (so its pending
-    /// transition is its own). Clearing only the fighter that happened to cross the threshold would
-    /// leave the other one permanently stuck playing the expert while still recording transitions, so
-    /// it would look like it was learning while never actually driving.
-    /// </summary>
-    private static void EndWarmStartForRole(string role)
-    {
-        foreach (var kv in sessions)
-            if (kv.Value.role == role) kv.Value.policy.ForceExpert = false;
-    }
-
-    // Convert the rule-based expert's gameplay-space jump/DI values into raw z targets for the clone
-    // regression. Returns null when there is nothing usable, so the caller falls back to cloning the
-    // move alone rather than injecting a bad target.
-    private static float[] ExpertScalarTargets(Session s)
-    {
-        if (s.owner == null || !s.owner.HasExpertGeometry) return null;
-        AIDecision expert = s.owner.ExpertGeometry;
-
-        var heads = s.cloneHeads ?? (s.cloneHeads = ActionScalars.CreateAll());
-        var z = new float[heads.Length];
-        z[ActionScalars.JumpPower] = heads[ActionScalars.JumpPower].Unsquash(expert.jumpPower);
-        z[ActionScalars.JumpAngle] = heads[ActionScalars.JumpAngle].Unsquash(expert.jumpAngle);
-        z[ActionScalars.DiPower] = heads[ActionScalars.DiPower].Unsquash(expert.diPower);
-        z[ActionScalars.DiAngle] = heads[ActionScalars.DiAngle].Unsquash(expert.diAngle);
-
-        // Refuse non-finite targets. A garbage expert value would otherwise put a NaN straight into the
-        // clone gradient, which is precisely how an earlier training run killed every policy at once.
-        for (int i = 0; i < z.Length; i++)
-            if (float.IsNaN(z[i]) || float.IsInfinity(z[i])) return null;
-        return z;
-    }
-
     private static void OnVoteResolved(int key, bool isGood, bool timedOut)
     {
         if (!sessions.TryGetValue(key, out var s)) return;
@@ -808,96 +675,6 @@ public class PolicyLearner
         if (timedOut) return;
         float delta = isGood ? rewardConfig.voteGood : -rewardConfig.voteBad;
         s.trainer.AdjustLastReward(delta);
-    }
-
-    /// <summary>Supervised clone of the rule-based expert's moves onto the network.</summary>
-    private static void CloneBatch(Session s)
-    {
-        if (s.cloneObs.Count == 0) return;
-        if (s.cloneHeads == null) s.cloneHeads = ActionScalars.CreateAll();
-
-        // Never clone onto a poisoned network. Warm start runs at the very start of a session, so this
-        // is cheap insurance rather than a routine check.
-        if (!s.net.WeightsAreFinite())
-        {
-            Debug.LogWarning($"[Training] {s.role}: network has non-finite weights; skipping clone batch.");
-            s.cloneObs.Clear();
-            s.cloneActions.Clear();
-            s.cloneScalarZ.Clear();
-            return;
-        }
-
-        s.net.ClearGradients();
-        var heads = s.cloneHeads;
-        var dMu = new float[ActionScalars.Count];
-        var dLogSd = new float[ActionScalars.Count];
-        for (int i = 0; i < s.cloneObs.Count; i++)
-        {
-            s.net.Forward(s.cloneObs[i]);
-            // Maximising log pi(expert) is exactly dLogProb = 1 on the expert action.
-            float[] targetZ = s.cloneScalarZ.Count > i ? s.cloneScalarZ[i] : null;
-            if (targetZ != null && heads != null)
-            {
-                // Pull each scalar mean toward the EXPERT's value, as a regression rather than as a
-                // log-prob. Maximising log N(z_expert; mu, sd) would drag sigma toward zero as well as
-                // mu toward the target, collapsing the head's spread; this moves only the mean and
-                // leaves exploration intact.
-                var means = s.net.ScalarMeans;
-                for (int k = 0; k < heads.Length; k++) dMu[k] = means[k] - targetZ[k];
-                Array.Clear(dLogSd, 0, dLogSd.Length);
-            }
-            else
-            {
-                Array.Clear(dMu, 0, dMu.Length);
-                Array.Clear(dLogSd, 0, dLogSd.Length);
-            }
-
-            // Value pretraining rides along with the behaviour clone.
-            //
-            // The critic is regressed onto the Monte-Carlo return of the expert trajectory this sample
-            // came from, with dValue = V - G. That is ordinary supervised regression on a known target,
-            // not a bootstrapped one, so it cannot be self-reinforcing: however wrong V starts, the
-            // gradient always points at a real number.
-            //
-            // This is the "address the value initialisation bias by value pretraining" step from
-            // arXiv:2503.01491, and it is why warm start is the right place for it - the expert plays a
-            // fixed policy, so its returns are exactly the thing the paper says to fit against.
-            float dValue = 0f;
-            if (s.cloneReturns.Count > i)
-            {
-                s.net.Forward(s.cloneObs[i]);
-                dValue = s.net.Value - s.cloneReturns[i];
-            }
-
-            s.net.Backprop(s.cloneObs[i], s.cloneActions[i], 1f, dValue, 0f, dMu, dLogSd);
-        }
-        s.net.ApplyGradients(CloneLearningRate / s.cloneObs.Count);
-    }
-
-    /// <summary>
-    /// Monte-Carlo return of the expert turn that just resolved, used as the value-pretraining target.
-    ///
-    /// Deliberately a plain discounted sum of what this fighter has actually banked so far this match,
-    /// with the terminal win/loss bonus folded in on the deciding turn. It is the reward stream the
-    /// reward config already defines, so the critic is trained on the same units the policy is
-    /// optimised against rather than on some rescaled variant.
-    ///
-    /// Stored per clone sample rather than recomputed at fit time because the trajectory is only
-    /// complete once it ends; by the time a batch is fitted, early samples would have to be
-    /// reconstructed from state that has since been overwritten.
-    /// </summary>
-    /// <summary>
-    /// Advance the warm-start discounted return by one resolved expert turn.
-    ///
-    /// Called from OnTurnResolved while warm start is active, so the value-pretraining targets
-    /// recorded at decision time describe the reward actually earned on that turn. sharedHyper is the
-    /// live PPO config, so the pretraining target uses the SAME discount the critic will later be
-    /// trained with; a mismatch would make the critic's target inconsistent with its own bootstrapping,
-    /// which is the very problem being fixed.
-    /// </summary>
-    private static void AccumulateWarmStartReturn(Session s, float reward)
-    {
-        s.warmStartReturn = s.warmStartReturn * sharedHyper.gamma + reward;
     }
 
     // --- Persistence ---------------------------------------------------------
@@ -1033,9 +810,9 @@ public class PolicyLearner
 
         warnedNoPretrainedCompanion = true;
         Debug.LogWarning(
-            "[AI] The companion has NO PRETRAINED WEIGHTS. It will play the rule-based brain and begin "
-            + "learning from your votes and match outcomes, reaching roughly the trained quality only "
-            + "after a few hundred turns of play.\nIf you expected a trained companion its weights are "
+            "[AI] The companion has NO PRETRAINED WEIGHTS. It starts from random weights and learns "
+            + "on this machine from your votes and match outcomes, so expect it to be weak for the "
+            + "first few hundred turns of play.\nIf you expected a trained companion its weights are "
             + "missing. Looked for:\n  shipped:  "
             + Path.Combine(Application.streamingAssetsPath, "AI", RoleCompanion + "_policy.json")
             + "\n            (create with Tools > Training > Export Companion Baseline)\n  your save: "
@@ -1111,11 +888,6 @@ public class PolicyLearner
         {
             var s = kv.Value;
             s.brain.trainer.BeginEpisode();
-            // The warm-start return accumulator is per fighter and must not carry across matches.
-            // Left running, it discounts the previous match's rewards into this one's value target,
-            // so after a few matches the critic is pretrained against a return inflated by everything
-            // that ever happened before it.
-            s.warmStartReturn = 0f;
         }
     }
 
@@ -1152,7 +924,7 @@ public class PolicyLearner
         var sb = new System.Text.StringBuilder();
         foreach (var s in sessions.Values)
         {
-            sb.Append($"{s.role}: {s.turns} turns, {s.updates} updates, warmStart={s.warmStart}, ");
+            sb.Append($"{s.role}: {s.turns} turns, {s.updates} updates, ");
         }
         return sb.ToString();
     }

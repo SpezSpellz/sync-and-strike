@@ -43,15 +43,24 @@ public abstract class AIController : CharacterController
     /// <summary>Snapshot taken when the decision was made, used to score the decision later.</summary>
     public AIDecisionContext DecisionContext { get; private set; }
 
+    /// <summary>Deterministic per-fighter ordinal, so two fighters do not share one RNG stream.</summary>
+    private static int ordinalCounter;
+
     protected virtual void InitializeAI()
     {
         // FighterAI.Personality is a plain serializable class, not a UnityEngine.Object,
         // so copy it field by field rather than using Instantiate.
         runtimePersonality = CopyPersonality(personality);
         ConfigurePersonality(runtimePersonality);
-        ruleBrain = new FighterAI(runtimePersonality, seed + Random.Range(0, Mathf.Max(1, seedJitter)));
+
+        // Deterministic per-fighter seeds. GetInstanceID / UnityEngine.Random are not reproducible
+        // across runs, and a shared seed would give every code-built fighter the SAME random-opponent
+        // stream, so all arenas would face an identical random agent.
+        int ordinal = ordinalCounter++;
+        int jitter = seedJitter > 0 ? new System.Random(seed).Next(seedJitter) : 0;
+        ruleBrain = new FighterAI(runtimePersonality, seed + ordinal + jitter);
         brain = SelectBrain();
-        behaviourRng = new System.Random(seed);
+        behaviourRng = new System.Random(seed + ordinal);
         moveIds = NeuralPolicy.BuildMoveIds(this);
     }
 
@@ -88,16 +97,6 @@ public abstract class AIController : CharacterController
     /// writer so it does not need to know how the session/policy indirection is arranged.
     /// </summary>
     public NeuralPolicy PolicyForTelemetry => PolicyLearner.PolicyFor(this);
-
-    // The geometry the rule-based brain chose on the most recent decision, or null before the first
-    // decision. Read by the warm-start clone so the policy inherits the expert's aim, not just its move
-    // choice. This is deliberately a snapshot of the RULE brain's output: once warm start ends the policy
-    // supplies its own, and cloning from the policy's own output would just reinforce itself.
-    public AIDecision ExpertGeometry { get; private set; }
-
-    // False before the first RequestDecision, so the clone path can tell "no expert geometry yet" from
-    // "expert geometry is all zeros".
-    public bool HasExpertGeometry { get; private set; }
 
     private static FighterAI.Personality CopyPersonality(FighterAI.Personality from)
     {
@@ -164,15 +163,9 @@ public abstract class AIController : CharacterController
 
         var target = ResolveTarget();
 
-        // The source decides WHO acts, and only the network sources are allowed to publish expert
-        // geometry. That conditional is load-bearing rather than tidiness: ExpertGeometry is the clone
-        // teacher PolicyLearner reads during warm start, so a scripted source writing its own decision
-        // there would behaviour-clone random moves instead of the expert's.
         if (BehaviourSource.UsesNetwork())
         {
             CurrentDecision = brain.Decide(this, target, ResolveAlly());
-            ExpertGeometry = CurrentDecision;
-            HasExpertGeometry = true;
         }
         else if (BehaviourSource == BehaviourSource.Rule)
         {
