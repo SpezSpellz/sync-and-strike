@@ -35,6 +35,7 @@ public class MoveSelectionUI : MonoBehaviour
 
     private int nameBoxHeight = 20;
     private bool previewQueued;
+    private bool initialRefreshComplete;
 
 
     private void Awake()
@@ -81,18 +82,26 @@ public class MoveSelectionUI : MonoBehaviour
         }
     }
 
-    private void OnEnable()
+    private void OnEnable() 
+    // OnENABLE()) PRECEDES START() so you have to check the ground AFTER (ground load at start) 
+    // so I added ground check at StartIdlePreview()
     {
         ClearSelection();
         jumpWheel.Hide();
+        previewQueued = false;
         if (owner == null) return;
-        if (owner.IsPreviewReady)
+
+        //initialRefresComplete for start up ground check
+        if (initialRefreshComplete && owner.IsPreviewReady)
         {
             StartIdlePreview();
             return;
         }
+
+
+        // On the first scene load, OnEnable runs before the floor registers in Start.
+        // Refresh in Update, when the contact check can see the floor.
         previewQueued = true;
-        RefreshButtons();
     }
 
     private void Update()
@@ -107,22 +116,19 @@ public class MoveSelectionUI : MonoBehaviour
             return;
     
         previewQueued = false;
+        initialRefreshComplete = true;
         StartIdlePreview();
     }
     
     private void StartIdlePreview()
     {
+        owner.Physics.DetectGround();
         owner.ResumePreview();
         RefreshButtons();
     }
 
     /// <summary>
-    /// Restores every button, then hides the ones the owner genuinely cannot use right now.
-    ///
-    /// A non-controllable panel is the enemy's read-only mirror of its own moveset, so it always
-    /// shows everything: hiding buttons there tells the player nothing useful, and because both
-    /// panels share the same bottom bar, launching the enemy used to wipe out half the controls
-    /// on screen, which read as the controls disappearing.
+    /// Show only moves the panel's fighter can currently use, including in the enemy's read-only panel.
     /// </summary>
     private void RefreshButtons()
     {
@@ -130,7 +136,7 @@ public class MoveSelectionUI : MonoBehaviour
         {
             if (moveButton == null) continue;
             moveButton.gameObject.SetActive(true);
-            if (isControllable && !moveButton.IsUsable())
+            if (!moveButton.IsUsable())
                 moveButton.gameObject.SetActive(false);
         }
     }
