@@ -567,7 +567,14 @@ public class PPOTrainer
 
                     // Textbook clipping mask: when the clipped branch is the active (smaller) term,
                     // the ratio is pinned and contributes no policy gradient.
-                    float A = advantage[i];
+                    //
+                    // Indexed by shuffle[i], NOT i. The transition being scored is buffer[shuffle[i]]
+                    // while advantages/returns are stored by BUFFER position, so reading [i] pairs each
+                    // observation's gradient with a different sample's advantage and return. With
+                    // Shuffle() randomising the order every epoch that turned the whole update into
+                    // label-shuffled noise, which is why the policy could not learn regardless of
+                    // reward or learning rate.
+                    float A = advantage[shuffle[i]];
                     bool useClipped = (A > 0f && ratio > 1f + hyper.clipEpsilon)
                                     || (A < 0f && ratio < 1f - hyper.clipEpsilon);
 
@@ -584,13 +591,20 @@ public class PPOTrainer
                     klAllSum += ratio - 1f - (newLogProb - tr.logProb);
                     klAllCount++;
 
-                    float dLogProb = useClipped ? 0f : A * ratio;
-                    float dValue = hyper.valueCoef * (value - returns[i]);
+                    // NEGATIVE coefficient. The clipped surrogate is MAXIMISED, so the loss being
+                    // minimised carries -A*ratio, and ApplyGradients does theta -= lr*g. Passing
+                    // +A*ratio therefore moved the policy AWAY from advantageous actions - the
+                    // gradient had the wrong sign, which is invisible in the KL/clip telemetry but
+                    // means the policy was trained to avoid whatever earned reward. The value and
+                    // entropy terms below are already correct under the same convention (verified
+                    // by Tools > Training > Run Adam XOR Sanity Check).
+                    float dLogProb = useClipped ? 0f : -A * ratio;
+                    float dValue = hyper.valueCoef * (value - returns[shuffle[i]]);
 
                     // Scalar heads get the SAME coefficient as the categorical head, because the ratio
                     // above is over the JOINT log-prob: one number scales every term. Clipping applies to
                     // the joint too, so a clipped sample contributes nothing to any head.
-                    float dScalarMu = useClipped ? 0f : A * ratio;
+                    float dScalarMu = useClipped ? 0f : -A * ratio;
                     if (heads != null)
                     {
                         ScalarCoefficients(tr.rawZ, heads, dMuBuf, dLogSdBuf);
@@ -607,7 +621,7 @@ public class PPOTrainer
                     // samples, so those numbers describe a region the update did not start from.
                     if (epoch == 0)
                     {
-                        batchValueLoss += (value - returns[i]) * (value - returns[i]);
+                        batchValueLoss += (value - returns[shuffle[i]]) * (value - returns[shuffle[i]]);
                         batchPolicyLoss += -A * ratio;
                     }
 

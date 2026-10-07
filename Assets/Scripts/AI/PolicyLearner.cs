@@ -455,11 +455,19 @@ public class PolicyLearner
         // Weights load whenever they exist, from persistent data or from the build. They used to require
         // the -resume flag, which meant a shipped companion never carried its learning across sessions
         // and a shipped enemy never used its trained policy unless the player passed a training switch.
-        WeightSource source = LoadWeights(net, role);
-        bool resumed = source != WeightSource.None;
-        Debug.Log(resumed
-            ? $"[AI] {role} loaded {source} weights (max|weight| {net.MaxAbsWeight:0.###})."
-            : $"[AI] {role} has no trained weights; starting from the rule-based warm start.");
+        // A training run starts from a FRESH random network unless -resume was passed.
+        //
+        // LoadWeights used to run unconditionally, so Tools > Training (and -training) silently
+        // resumed whatever file was already on disk. Every run therefore restarted from the previous
+        // run's local optimum and could look like it "never learned" no matter what was tuned.
+        bool freshStart = TrainingMode.enabled && !TrainingMode.resume;
+        WeightSource source = freshStart ? WeightSource.None : LoadWeights(net, role);
+        bool resumed = !freshStart && source != WeightSource.None;
+        Debug.Log(freshStart
+            ? $"[AI] {role} fresh random init (training run with no -resume)."
+            : resumed
+                ? $"[AI] {role} loaded {source} weights (max|weight| {net.MaxAbsWeight:0.###})."
+                : $"[AI] {role} has no trained weights; starting from the rule-based warm start.");
         WarnIfNoPretrainedCompanion(source, role);
 
         // Statistics travel with the weights, and only with the player's own. They describe the input

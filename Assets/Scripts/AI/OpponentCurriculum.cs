@@ -126,7 +126,8 @@ public sealed class WinWindow
 ///             constant because a random opponent loses almost every match.
 ///   phase 1 - 50% random, 50% rule-based. The rule brain is the first opponent that actually defends,
 ///             so blocking and spacing have to be learned for real to keep winning.
-///   phase 2 - 25% random, 25% rule, 50% live opponent. Cross-play.
+///   phase 2 - 33% random, 33% rule, 33% live opponent. Cross-play against the equally-weighted
+///             set of fixed and drifting opponents.
 ///
 /// Why this rather than a fixed mixture: a win rate against a live opponent that improves in lockstep
 /// is not evidence of anything. A curriculum measures against FIXED opponents first, where the number
@@ -147,10 +148,10 @@ public sealed class OpponentCurriculum
     public const int PhaseCount = 3;
 
     /// <summary>Fraction of matches fought against the random source, per phase. Live is the remainder.</summary>
-    private readonly float[] randomShare = { 1f, 0.5f, 0.25f };
+    private readonly float[] randomShare = { 1f, 0.5f, 1f / 3f };
 
     /// <summary>Fraction fought against the rule-based expert, per phase.</summary>
-    private readonly float[] ruleShare = { 0f, 0.5f, 0.25f };
+    private readonly float[] ruleShare = { 0f, 0.5f, 1f / 3f };
 
     // Promotion gates. Advancing needs a high win rate over a SHORT window; regressing needs a low one
     // over a LONG window. The asymmetry is the point - promoting early is cheap to undo, but dropping a
