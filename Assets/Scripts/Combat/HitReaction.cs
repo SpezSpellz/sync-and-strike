@@ -63,7 +63,8 @@ public static class HitReaction
             // A blocked hit still connected, it just did chip damage (ResolveBlocked applies it).
             // Counted so a fighter cannot inflate its hit count by tunnelling into a guard.
             attacker.CombatStats.RecordHit(0f);
-            victim.CombatStats.RecordDamageTaken(data.damage * PhysicsConstants.BLOCK_CHIP_MODIFIER);
+            victim.CombatStats.RecordDamageTaken(
+                data.damage * AttackerDamageMultiplier(attacker) * PhysicsConstants.BLOCK_CHIP_MODIFIER);
             return false;
         }
 
@@ -153,9 +154,18 @@ public static class HitReaction
         if (data.damage <= 0) return 0f;
 
         int count = attacker.ComboCount - 1 + (data.damageProration > 0 ? data.damageProration : 0);
-        float scaled = data.damage * PhysicsConstants.ComboStaleModifier(Mathf.Max(count, 0));
+        float scaled = data.damage * AttackerDamageMultiplier(attacker)
+                       * PhysicsConstants.ComboStaleModifier(Mathf.Max(count, 0));
         return Mathf.Max(scaled, 1f);
     }
+
+    /// <summary>
+    /// Per-attacker damage scale (<see cref="CharacterData.damageMultiplier"/>), used by both the normal
+    /// and the blocked/chip path so a guard cannot be bypassed by a caller that forgets one of them.
+    /// Falls back to 1 for a null attacker or missing data rather than throwing mid-hit.
+    /// </summary>
+    private static float AttackerDamageMultiplier(CharacterController attacker) =>
+        attacker != null && attacker.Data != null ? attacker.Data.damageMultiplier : 1f;
 
     private static CombatState ResolveHurtState(CharacterController victim, bool grounded,
         bool forcedLaunch, HitboxData data)
@@ -209,7 +219,8 @@ public static class HitReaction
         // Chip damage through the guard: damage / 3, times the hitbox's own chip modifier. A
         // blocking fighter stays on their feet rather than entering a hurt state, so the
         // knockback here is horizontal only.
-        victim.ApplyDamage(data.damage * PhysicsConstants.BLOCK_CHIP_MODIFIER * data.ChipDamage);
+        victim.ApplyDamage(data.damage * AttackerDamageMultiplier(attacker)
+                           * PhysicsConstants.BLOCK_CHIP_MODIFIER * data.ChipDamage);
         victim.ApplyKnockback(new Vector2(pushback * pushDir, 0f));
 
         // The attacker is shoved back by half the blocker's pushback, in the opposite direction.

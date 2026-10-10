@@ -197,6 +197,64 @@ public class PPOTrainer
         shuffle = new int[hyper.bufferSize];
     }
 
+    // --- Reused per-update scratch ---
+    //
+    // Allocated once and reused, instead of five fresh arrays per update. This is a pure allocation
+    // elimination, not a behaviour change: every element the update reads is written (or explicitly
+    // cleared) for [0, n) before use, so the arithmetic is identical and the run stays deterministic.
+    // At batchSize 2048 the previous form churned ~5 arrays of 2048 floats/ints through the GC on every
+    // update, and an update fires per batch, so on a long run that is the dominant managed allocation.
+    private int[] orderScratch;
+    private int[] seqScratch;
+    private float[] advantageScratch;
+    private float[] returnsScratch;
+    private float[] bootValueScratch;
+    private IComparer<int> orderComparer;
+    private ContinuousHead[] headsScratch;
+    private float[] dMuScratch;
+    private float[] dLogSdScratch;
+
+    /// <summary>
+    /// Wall-clock spent inside <see cref="Update"/> since this trainer was created, plus the number of
+    /// calls. Exists to attribute a run's throughput between the PPO step and the simulation; timing
+    /// feeds no RNG and no branch of the computation, so determinism is unaffected.
+    /// </summary>
+    public double UpdateSecondsTotal { get; private set; }
+    public int UpdateCalls { get; private set; }
+    private readonly System.Diagnostics.Stopwatch updateWatch = new System.Diagnostics.Stopwatch();
+
+    private void EnsureScratch(int n)
+    {
+        if (orderScratch == null || orderScratch.Length < n)
+        {
+            orderScratch = new int[n];
+            seqScratch = new int[n];
+            advantageScratch = new float[n];
+            returnsScratch = new float[n];
+            bootValueScratch = new float[n];
+        }
+        for (int i = 0; i < n; i++) { orderScratch[i] = i; seqScratch[i] = i; }
+        // bootValue is now written for every transition in [0, n) below, so this clear is defensive
+        // only: it keeps a shorter batch from reading a stale entry left by a previous, longer one if
+        // the writer above ever stops covering the whole range again.
+        Array.Clear(bootValueScratch, 0, n);
+
+        // The comparer captures `this` and the scratch fields, so one instance is built and reused
+        // instead of a fresh delegate per update.
+        if (orderComparer == null)
+        {
+            orderComparer = Comparer<int>.Create((a, b) =>
+            {
+                var ta = buffer[a]; var tb = buffer[b];
+                int c = ta.agentId.CompareTo(tb.agentId);
+                if (c != 0) return c;
+                c = ta.episode.CompareTo(tb.episode);
+                if (c != 0) return c;
+                return seqScratch[a].CompareTo(seqScratch[b]);
+            });
+        }
+    }
+
     public int Buffered => buffer.Count;
     public int UpdateCount { get; private set; }
 
@@ -330,7 +388,7 @@ public class PPOTrainer
     /// RejectedTransitionCount makes the rejections visible, because a run quietly dropping samples is
     /// otherwise indistinguishable from a run with nothing to learn.
     /// </summary>
-    public void Add(float[] obs, float[] nextObs, int action, float logProb, float value, float reward,
+    public Transition Add(float[] obs, float[] nextObs, int action, float logProb, float value, float reward,
                     bool done, float[] rawZ = null, int agentId = 0, int episode = 0)
     {
         if (!IsFinite(reward) || !IsFinite(value) || !IsFinite(logProb)
@@ -338,16 +396,23 @@ public class PPOTrainer
             || (rawZ != null && !AllFinite(rawZ)))
         {
             RejectedTransitionCount++;
-            return;
+            return null;
         }
 
-        buffer.Add(new Transition
+        var tr = new Transition
         {
             obs = obs, nextObs = nextObs, action = action, rawZ = rawZ,
             logProb = logProb, value = value, reward = reward, done = done,
             agentId = agentId, episode = episode,
-        });
+        };
+        buffer.Add(tr);
         if (buffer.Count > hyper.bufferSize) buffer.RemoveAt(0);
+        // Returned so the caller can hold a DIRECT reference to its own transition and adjust that
+        // transition's reward later (the terminal bonus, the player's vote). Adjusting "the last
+        // transition in the buffer" instead is wrong the moment a brain is shared: with N arenas on
+        // one role-brain the tail belongs to whichever arena appended most recently, and a scripted
+        // opponent that recorded nothing would still be charged against a real learner's sample.
+        return tr;
     }
 
     /// <summary>Transitions discarded for carrying a non-finite value. Should stay at 0.</summary>
@@ -359,12 +424,6 @@ public class PPOTrainer
     {
         for (int i = 0; i < v.Length; i++) if (!IsFinite(v[i])) return false;
         return true;
-    }
-
-    /// <summary>Apply a late reward adjustment (e.g. the player's vote) to the most recent turn.</summary>
-    public void AdjustLastReward(float delta)
-    {
-        if (buffer.Count > 0) buffer[buffer.Count - 1].reward += delta;
     }
 
     /// <summary>True once a full batch has been collected. Gates the update so the cost per turn is
@@ -400,16 +459,18 @@ public class PPOTrainer
         // Counted at the top, once per call that actually does work. The increment at the end of the
         // method covers the same event, so having both would double-count.
 
+        updateWatch.Restart();
+
         // --- GAE advantages ---
-        var advantage = new float[n];
-        var returns = new float[n];
+        EnsureScratch(n);
+        var advantage = advantageScratch;
+        var returns = returnsScratch;
 
         // Order in which transitions were collected. 2v1 shares one brain across Player and Companion,
         // and TurnManager resolves them in list order, so the buffer arrives INTERLEAVED: P, C, P, C...
         // GAE is a recursion along a trajectory, so walking this array in collection order would
         // discount each fighter's advantage toward the OTHER fighter's next state.
-        var order = new int[n];
-        for (int i = 0; i < n; i++) order[i] = i;
+        var order = orderScratch;
 
         // Stable sort by (agentId, episode) so each fighter's own transitions form one contiguous run
         // in collection order. Sorting is what makes the recursion valid - the previous attempt instead
@@ -426,27 +487,25 @@ public class PPOTrainer
         // The comparators must agree: the boundary tests below compare agentId and episode, so a
         // mismatch between how transitions are SORTED and how GROUPS are detected would split one group
         // in two places and re-introduce the bug the sort exists to remove.
-        var seq = new int[n];
-        for (int i = 0; i < n; i++) seq[i] = i;
-        Array.Sort(order, (a, b) =>
-        {
-            var ta = buffer[a]; var tb = buffer[b];
-            int c = ta.agentId.CompareTo(tb.agentId);
-            if (c != 0) return c;
-            c = ta.episode.CompareTo(tb.episode);
-            if (c != 0) return c;
-            return seq[a].CompareTo(seq[b]);
-        });
+        Array.Sort(order, 0, n, orderComparer);
 
-        // Bootstrap value for the last transition of each group, evaluated once per group.
-        var bootValue = new float[n];
+        // Next-state value for EVERY transition, not just the group boundary.
+        //
+        // The TD residual is delta = reward + gamma*V(nextState) - value, so it needs V(nextState) on
+        // every sample. This loop used to evaluate it only at the LAST transition of each
+        // (agentId, episode) group and leave the rest of bootValue at zero, which silently dropped the
+        // bootstrap from every INTERIOR transition: most deltas became (reward - value). Because each
+        // transition's target is then built from the next transition's, the critic's regression target
+        // re-acquired a dependence on the critic's own output - the exact self-referential target the
+        // valueLambda note warns about - and it is why explained variance sat at -1.2 (worse than a
+        // constant) no matter what else was tuned. Restoring V(nextState) is what makes valueLambda=1
+        // produce a real accumulated-reward target instead of a degenerate one.
+        var bootValue = bootValueScratch;
         for (int k = 0; k < n; k++)
         {
             int idx = order[k];
-            bool lastOfGroup = k == n - 1
-                               || buffer[order[k + 1]].agentId != buffer[idx].agentId
-                               || buffer[order[k + 1]].episode != buffer[idx].episode;
-            if (lastOfGroup && !buffer[idx].done) bootValue[k] = net.Forward(buffer[idx].nextObs);
+            if (buffer[idx].done) { bootValue[k] = 0f; continue; }
+            bootValue[k] = net.Forward(buffer[idx].nextObs);
         }
 
         // Walk each group backwards, maintaining a separate GAE accumulator per group.
@@ -567,9 +626,19 @@ public class PPOTrainer
 
         // Scalar-head scratch, allocated once per update. Sized from the network, so a move-only network
         // gets zero-length buffers and the scalar path costs nothing.
-        var heads = HeadsFor(net.ScalarCount);
-        var dMuBuf = new float[net.ScalarCount];
-        var dLogSdBuf = new float[net.ScalarCount];
+        var heads = headsScratch ??= HeadsFor(net.ScalarCount);
+        if (dMuScratch == null || dMuScratch.Length < net.ScalarCount)
+        {
+            dMuScratch = new float[net.ScalarCount];
+            dLogSdScratch = new float[net.ScalarCount];
+        }
+        // Cleared once per update so a head count mismatch (rare, but possible if the network and the
+        // policy were built with different scalar counts) cannot leave a stale entry where a fresh
+        // array would have held zero. Under normal matching sizes every entry is overwritten anyway.
+        Array.Clear(dMuScratch, 0, dMuScratch.Length);
+        Array.Clear(dLogSdScratch, 0, dLogSdScratch.Length);
+        var dMuBuf = dMuScratch;
+        var dLogSdBuf = dLogSdScratch;
         bool stopAll = false;
         for (int epoch = 0; epoch < hyper.epochs && !stopAll; epoch++)
         {
@@ -720,6 +789,10 @@ public class PPOTrainer
         // Number of full batches trained on. Lets telemetry show updates-per-turn directly, which is the
         // number that collapsed before: one per turn instead of one per batch.
         UpdateCount++;
+
+        updateWatch.Stop();
+        UpdateSecondsTotal += updateWatch.Elapsed.TotalSeconds;
+        UpdateCalls++;
     }
 
     // Range descriptors for the scalar heads, shared by index with NeuralPolicy. Kept here so the

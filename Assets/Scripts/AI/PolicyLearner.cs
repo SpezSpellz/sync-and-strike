@@ -140,6 +140,25 @@ public class PolicyLearner
         /// <summary>Distance to the target when the move was committed, for approach shaping.</summary>
         public float pendingDistance;
 
+        /// <summary>
+        /// This fighter's most recent transition, held by DIRECT reference so a late reward adjustment
+        /// (terminal bonus, player vote) lands on the sample the fighter actually contributed.
+        ///
+        /// The brain is shared across every arena of a role, so the buffer tail is not this fighter's
+        /// sample - it is whichever arena appended last. Adjusting the tail therefore credited the wrong
+        /// match and, worse, let a scripted opponent that recorded nothing push a bonus into a real
+        /// learner's buffer. That is a spurious +/-winBonus on a random recent sample for roughly half
+        /// of every role's matches, which is the shape of a policy that "barely improves".
+        ///</summary>
+        public PPOTrainer.Transition lastTransition;
+
+        /// <summary>
+        /// True once this fighter has recorded a transition in the CURRENT match. Guards
+        /// <see cref="lastTransition"/> from being used for a match the fighter did not actually play
+        /// with its own network (a scripted curriculum opponent, or an evaluation match).
+        ///</summary>
+        public bool recordedThisMatch;
+
         // Convenience passthroughs, so the reward code below reads naturally.
         public string role => brain.role;
         public NeuralNetwork net => brain.net;
@@ -498,6 +517,9 @@ public class PolicyLearner
         public int epochsRun;
         public int minibatchesRun;
         public float klAll;
+        /// <summary>Wall-clock spent in PPO updates for this brain, and how many updates ran.</summary>
+        public double updateSeconds;
+        public int updateCalls;
     }
 
     /// <summary>
@@ -537,6 +559,8 @@ public class PolicyLearner
                 epochsRun = b.trainer.EpochsRun,
                 minibatchesRun = b.trainer.MinibatchesRun,
                 klAll = b.trainer.MeanKlAcrossEpochs,
+                updateSeconds = b.trainer.UpdateSecondsTotal,
+                updateCalls = b.trainer.UpdateCalls,
             };
         }
         return result;
@@ -643,9 +667,16 @@ public class PolicyLearner
         // the policy reuses and overwrites that array on the very next decision and the buffer has to
         // keep describing the action that was actually played.
         float[] rawZ = s.policy.ScalarCount > 0 ? (float[])s.policy.LastRawZ.Clone() : null;
-        s.trainer.Add(s.policy.LastObs, nextObs, s.policy.LastAction,
+        var added = s.trainer.Add(s.policy.LastObs, nextObs, s.policy.LastAction,
                       s.policy.LastLogProb, s.policy.LastValue, reward, done, rawZ,
                       agentId: self.GetInstanceID(), episode: s.trainer.CurrentEpisode);
+        // Null means the transition was rejected as non-finite. Keep the previous reference rather than
+        // clearing it, so a later bonus cannot be applied to a sample that was never stored.
+        if (added != null)
+        {
+            s.lastTransition = added;
+            s.recordedThisMatch = true;
+        }
         WarnIfPoisoned(s);
         s.lastReward = reward;
         s.turns++;
@@ -673,8 +704,9 @@ public class PolicyLearner
         // A timeout is not a signal: the player did not actually judge the move, so it must not
         // push the policy either way. Only a real good/bad vote counts.
         if (timedOut) return;
+        if (!s.recordedThisMatch || s.lastTransition == null) return;
         float delta = isGood ? rewardConfig.voteGood : -rewardConfig.voteBad;
-        s.trainer.AdjustLastReward(delta);
+        s.lastTransition.reward += delta;
     }
 
     // --- Persistence ---------------------------------------------------------
@@ -901,7 +933,27 @@ public class PolicyLearner
         if (owner == null || bonus == 0f) return;
         if (!sessions.TryGetValue(owner.GetInstanceID(), out var s)) return;
         if (!IsLearning(s.role)) return;
-        s.trainer.AdjustLastReward(bonus);
+        // Only a fighter that actually recorded a transition this match may be credited. A scripted
+        // curriculum opponent shares the role's brain but produced no sample, and the previous code
+        // would still have written the bonus onto whatever sample happened to sit at the buffer tail.
+        if (!s.recordedThisMatch || s.lastTransition == null) return;
+        s.lastTransition.reward += bonus;
+    }
+
+    /// <summary>
+    /// Mark the start of a new match for one fighter, so terminal bonuses are attributed only to
+    /// transitions this fighter records during THIS match.
+    ///
+    /// Per-fighter rather than a global sweep on purpose: with N arenas sharing a role's brain, a
+    /// global clear would also wipe fighters still mid-match in other arenas. Called by the training
+    /// runner when it assigns each arena's behaviour for the next match.
+    /// </summary>
+    public static void NotifyMatchStart(AIController owner)
+    {
+        if (owner == null) return;
+        if (!sessions.TryGetValue(owner.GetInstanceID(), out var s)) return;
+        s.recordedThisMatch = false;
+        s.lastTransition = null;
     }
 
     /// <summary>

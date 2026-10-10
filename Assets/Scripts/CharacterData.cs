@@ -19,6 +19,13 @@ public class CharacterData : MonoBehaviour
     [Tooltip("Characters recover from a knockdown with less health than a combo end.")]
     public bool isPlayerSide;
 
+    /// <summary>
+    /// Multiplier applied to every hit this fighter lands. 1 is parity. Set at spawn from
+    /// <see cref="CombatBalance"/> for the enemy rather than authored, so the code-built training
+    /// arena and the shipped scene cannot disagree about how hard the enemy hits.
+    /// </summary>
+    public float damageMultiplier = 1f;
+
     private void Awake()
     {
         animations = Resources.LoadAll<AnimationData>(AnimationDataResourcePath);

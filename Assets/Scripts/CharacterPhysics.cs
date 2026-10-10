@@ -103,6 +103,18 @@ public class CharacterPhysics : PhysicsCollider
 
     private float pendingPushback;
 
+    /// <summary>
+    /// This fighter's collision box, REFRESHED IN PLACE and returned.
+    ///
+    /// A fresh AABB used to be allocated on every call, and the physics step calls this once per
+    /// collider pair per sweep pass (plus DetectGround and UpdateWallContact) - tens of throwaway
+    /// objects per fighter per simulation frame, which showed up as ~1 ms/turn of fighter Step time
+    /// in the training profiler. Reusing one instance is safe because every caller consumes the box
+    /// immediately and each collider owns its own instance, so two live references never alias the
+    /// same buffer. This is a pure allocation change: the bounds computed are identical.
+    /// </summary>
+    private readonly AABB _box = new AABB(0f, 0f, 0f, 0f);
+
     public override AABB getBoundingBox()
     {
         // characterData is null until Initialize() runs, which happens from CharacterController.Start().
@@ -110,12 +122,15 @@ public class CharacterPhysics : PhysicsCollider
         // that first frame. Every caller already null-checks the returned AABB, so bailing out here is
         // safe and turns a hard crash into "no collider this frame".
         if (characterData == null) return null;
-        return new AABB(
-            transform.position.x - this.characterData.width / 2,
-            transform.position.y - this.characterData.height / 2,
-            transform.position.x + this.characterData.width / 2,
-            transform.position.y + this.characterData.height / 2
-        );
+
+        float halfW = characterData.width * 0.5f;
+        float halfH = characterData.height * 0.5f;
+        Vector3 p = transform.position;
+        _box.minX = p.x - halfW;
+        _box.minY = p.y - halfH;
+        _box.maxX = p.x + halfW;
+        _box.maxY = p.y + halfH;
+        return _box;
     }
 
     /// <summary>

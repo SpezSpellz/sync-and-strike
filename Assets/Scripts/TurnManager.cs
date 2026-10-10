@@ -54,6 +54,24 @@ public class TurnManager : MonoBehaviour
     /// counter is reset on every match end, so dividing it by total elapsed time has no meaning.</summary>
     public long TotalTurns { get; private set; }
 
+    /// <summary>
+    /// Wall-clock accounting for the simulation loop, so a throughput run can attribute time between
+    /// the physics/fighter step and the rest (PPO updates, decision building, telemetry). Timing feeds
+    /// no RNG and no branch of the calculation, so it cannot affect determinism.
+    ///
+    /// <see cref="SimSecondsTotal"/> covers the whole step loop including PPO updates run from
+    /// TurnResolved; <see cref="FighterStepSecondsTotal"/> and <see cref="HitboxStepSecondsTotal"/> split
+    /// out the two inner calls so "the sim is slow" can be told apart from "the learner is slow".
+    /// </summary>
+    public double SimSecondsTotal { get; private set; }
+    public double FighterStepSecondsTotal { get; private set; }
+    public double HitboxStepSecondsTotal { get; private set; }
+
+    private static long SimClock() => System.Diagnostics.Stopwatch.GetTimestamp();
+    private static double SimSecondsSince(long startTicks) =>
+        (System.Diagnostics.Stopwatch.GetTimestamp() - startTicks)
+        / (double)System.Diagnostics.Stopwatch.Frequency;
+
     [Tooltip("Backstop: resume the turn if the rating prompt has not resolved by now.")]
     private float maxVoteWaitSeconds = 30f;
 
@@ -310,6 +328,7 @@ public class TurnManager : MonoBehaviour
                         steps = Mathf.Min(stepsWanted, budget);
                     }
 
+                    long simStart = SimClock();
                     while (steps-- > 0)
                     {
                         int totalPlayers = players.getList().Count;
@@ -333,15 +352,22 @@ public class TurnManager : MonoBehaviour
                             // submitted; in those cases stepping further would run the sim outside a turn.
                             if (Phase != TurnPhase.Simulating) break;
                         }
+                        long fighterStart = SimClock();
                         foreach (var player_turn_data in players.getList())
                         {
                             player_turn_data.player.Step();
                         }
+                        FighterStepSecondsTotal += SimSecondsSince(fighterStart);
+
+                        long hitboxStart = SimClock();
                         Hitbox.Step();
+                        HitboxStepSecondsTotal += SimSecondsSince(hitboxStart);
+
                         framesThisTurn++;
                         SimFramesThisFrame++;
                         TotalSimFrames++;
                     }
+                    SimSecondsTotal += SimSecondsSince(simStart);
                     break;
                 }
         }

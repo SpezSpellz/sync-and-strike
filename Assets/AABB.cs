@@ -15,15 +15,6 @@ public class AABB
         this.maxY = maxY;
     }
 
-    public AABB expand(float x, float y) {
-        return new AABB(
-            this.minX - x/2,
-            this.minY - y/2,
-            this.maxX + x/2,
-            this.maxY + y/2
-        );
-    }
-
     public Vector2 getCenter()
     {
         return new Vector2((this.minX + this.maxX) / 2, (this.minY + this.maxY) / 2);
@@ -44,6 +35,19 @@ public class AABB
         public bool HitVertical;
     }
     public RayHit rayIntersect(float begX, float begY, float endX, float endY)
+        => RayIntersectBounds(minX, minY, maxX, maxY, begX, begY, endX, endY);
+
+    /// <summary>
+    /// The ray/AABB test against EXPLICIT bounds.
+    ///
+    /// Split out of <see cref="rayIntersect"/> so <see cref="sweep"/> can test the Minkowski-expanded
+    /// box without materialising it. The old form built a throwaway AABB per pair test via
+    /// <see cref="expand"/>, and sweep is the innermost loop of the physics step - it runs once per
+    /// collider pair per sweep pass, so that was the single largest source of per-frame garbage.
+    /// The arithmetic is byte-for-byte the same as before.
+    /// </summary>
+    private static RayHit RayIntersectBounds(float minX, float minY, float maxX, float maxY,
+                                             float begX, float begY, float endX, float endY)
     {
         float xdiff = endX - begX;
         float ydiff = endY - begY;
@@ -81,8 +85,17 @@ public class AABB
 
     public RayHit sweep(AABB other, float veloX, float veloY)
     {
-        var center = this.getCenter();
-        var inter = other.expand(this.getWidth(), this.getHeight()).rayIntersect(center.x, center.y, center.x + veloX, center.y + veloY);
+        // Minkowski-expand the other box by THIS box's half-extents and ray-cast from this box's
+        // centre. Computed inline instead of building an expanded AABB, so a sweep pair allocates
+        // nothing. Bounds are identical to expand(this.getWidth(), this.getHeight()).
+        float halfW = (maxX - minX) * 0.5f;
+        float halfH = (maxY - minY) * 0.5f;
+        float cx = (minX + maxX) * 0.5f;
+        float cy = (minY + maxY) * 0.5f;
+        var inter = RayIntersectBounds(
+            other.minX - halfW, other.minY - halfH,
+            other.maxX + halfW, other.maxY + halfH,
+            cx, cy, cx + veloX, cy + veloY);
         if (!float.IsNaN(inter.Distance))
             return inter;
         return new RayHit { Distance = float.PositiveInfinity };

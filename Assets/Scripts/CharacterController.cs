@@ -315,10 +315,37 @@ public class CharacterController : MonoBehaviour
 
     public virtual void Start()
     {
+        ApplyCombatBalance();
+
         previewController?.Initialize(characterData);
         anim.Initialize(characterData.animations);
         stateMachine.Change(new IdleState(this));
+        // Registration snapshots Save() (which stores health), so the balance scaling above must run
+        // BEFORE this line for every match reset to restore the scaled health rather than the base.
         this.id = Turn.RegisterPlayer(this);
+    }
+
+    /// <summary>
+    /// Apply the enemy's <see cref="CombatBalance"/> multipliers to this fighter, if it is the enemy.
+    ///
+    /// Runs for code-built training fighters AND authored scene fighters alike, which is the point:
+    /// the training arena has no authored CharacterData to inherit these values from.
+    /// </summary>
+    private void ApplyCombatBalance()
+    {
+        if (characterData == null) return;
+
+        if (characterData.team != CombatTeam.Enemy)
+        {
+            characterData.damageMultiplier = 1f;
+            return;
+        }
+
+        characterData.damageMultiplier = CombatBalance.enemyDamageMultiplier;
+
+        if (CombatBalance.enemyHealthMultiplier == 1f) return;
+        characterData.maxHealth *= CombatBalance.enemyHealthMultiplier;
+        characterData.health = characterData.maxHealth;
     }
 
     public void PlayIdleAnimation() => anim.PlayIdle();
@@ -588,14 +615,26 @@ public class CharacterController : MonoBehaviour
     /// <summary>True when this fighter is facing left, i.e. its sprite x-scale is negative.</summary>
     public bool IsFacingLeft => transform.localScale.x < 0f;
 
+    /// <summary>This fighter's hurtbox, refreshed in place and returned.</summary>
+    ///
+    /// The box is submitted to the arena's HitboxManager once per simulation frame and the list is
+    /// cleared at the end of that manager's Step(), so the instance is never retained across frames -
+    /// one per fighter is enough. Allocating a new HurtBox every frame was the other half of the
+    /// per-Step garbage the training profiler attributed to fighter Step time. Same bounds as before.
+    private HurtBox _hurtBox;
+
     public HurtBox getHurtBox()
     {
-        return new HurtBox(
-            this,
-            transform.position.x - characterData.width * 0.5f,
-            transform.position.y - characterData.height * 0.5f,
-            transform.position.x + characterData.width * 0.5f,
-            transform.position.y + characterData.height * 0.5f);
+        if (_hurtBox == null) _hurtBox = new HurtBox(this, 0f, 0f, 0f, 0f);
+
+        float halfW = characterData.width * 0.5f;
+        float halfH = characterData.height * 0.5f;
+        Vector3 p = transform.position;
+        _hurtBox.minX = p.x - halfW;
+        _hurtBox.minY = p.y - halfH;
+        _hurtBox.maxX = p.x + halfW;
+        _hurtBox.maxY = p.y + halfH;
+        return _hurtBox;
     }
 
     public virtual void RequestDecision() { }

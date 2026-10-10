@@ -179,6 +179,32 @@ public static class TrainingMode
             }
         }
 
+        // Combat balance overrides, e.g. -enemyDamage=1.9 -enemyHealth=1.9. Parsed unconditionally
+        // (not only when -training is set) so the same switch can pin the numbers for a balance test
+        // in a normal build. They only change the ENEMY, and only at fighter spawn.
+        foreach (var a in args)
+        {
+            if (string.IsNullOrEmpty(a)) continue;
+            const string damageKey = "-enemyDamage=";
+            const string healthKey = "-enemyHealth=";
+            string field = null;
+            string valueText = null;
+            if (a.StartsWith(damageKey)) { field = "enemyDamage"; valueText = a.Substring(damageKey.Length); }
+            else if (a.StartsWith(healthKey)) { field = "enemyHealth"; valueText = a.Substring(healthKey.Length); }
+            if (field == null) continue;
+
+            if (float.TryParse(valueText, System.Globalization.NumberStyles.Float,
+                               System.Globalization.CultureInfo.InvariantCulture, out float v)
+                && CombatBalance.TrySet(field, v))
+            {
+                Debug.Log($"[Training] enemy balance override {field}={v:0.###} ({CombatBalance.Describe()}).");
+            }
+            else
+            {
+                Debug.LogWarning($"[Training] ignoring '{a}' (expected a positive value).");
+            }
+        }
+
         if (enabled)
         {
             if (secondsPerFrame <= 0f) secondsPerFrame = 0.001f;

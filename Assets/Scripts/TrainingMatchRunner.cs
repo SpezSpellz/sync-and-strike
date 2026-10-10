@@ -349,6 +349,9 @@ public class TrainingMatchRunner : MonoBehaviour
         // is the only thing that knows the stage geometry.
         var stageBuilder = GetComponent<TrainingArenaBuilder>();
         if (stageBuilder != null) Debug.Log($"[Training] stage: {stageBuilder.StageSummary()}");
+        // Stated on the banner because it changes every reward the run sees. A balance change that is
+        // not in the log makes two segments' CSVs look like a policy regression.
+        Debug.Log($"[Training] combat balance: {CombatBalance.Describe()}.");
     }
 
     /// <summary>
@@ -674,6 +677,27 @@ public class TrainingMatchRunner : MonoBehaviour
         // from a genuinely cheap one.
         avgFramesPerTurn = turnsTotal > 0 ? (float)simFramesTotal / turnsTotal : 0f;
 
+        // Where the wall-clock actually goes. turns/s alone cannot say whether the bottleneck is the
+        // physics step, the fighter state machines, or the PPO update - and each needs a different fix.
+        // Timing only OBSERVES; it feeds no RNG and no branch of the sim, so the run stays deterministic.
+        double simSec = 0, fighterSec = 0, hitboxSec = 0;
+        foreach (var r in runs)
+        {
+            simSec += r.arena.TurnManager.SimSecondsTotal;
+            fighterSec += r.arena.TurnManager.FighterStepSecondsTotal;
+            hitboxSec += r.arena.TurnManager.HitboxStepSecondsTotal;
+        }
+        double ppoSec = 0; int ppoCalls = 0;
+        foreach (var kv in PolicyLearner.BrainStats())
+        {
+            ppoSec += kv.Value.updateSeconds;
+            ppoCalls += kv.Value.updateCalls;
+        }
+        double simMsPerTurn = turnsTotal > 0 ? simSec / turnsTotal * 1000.0 : 0.0;
+        double fighterMsPerTurn = turnsTotal > 0 ? fighterSec / turnsTotal * 1000.0 : 0.0;
+        double ppoMsPerUpdate = ppoCalls > 0 ? ppoSec / ppoCalls * 1000.0 : 0.0;
+        double ppoShare = simSec + ppoSec > 0.0 ? ppoSec / (simSec + ppoSec) : 0.0;
+
         // avgFramesPerTurn separates "few turns, each expensive" from "many turns, each cheap".
         // Without it a low turns/s is ambiguous: the turn count alone cannot distinguish a policy that
         // stalls (turns hit the frame cap) from a genuinely slow simulation, and those need opposite fixes.
@@ -681,6 +705,8 @@ public class TrainingMatchRunner : MonoBehaviour
             + $"phase={run.arena.TurnManager.Phase} "
             + $"[{elapsed:0}s {turnsPerSec:0.00} turns/s {framesPerSec:0} simframes/s "
             + $"{avgFramesPerTurn:0.0} frames/turn "
+            + $"sim {simMsPerTurn:0.00}ms/turn (fighter {fighterMsPerTurn:0.00}, hitbox {hitboxSec / Mathf.Max(1f, (float)turnsTotal) * 1000.0:0.00}) "
+            + $"ppo {ppoMsPerUpdate:0.0}ms/update {ppoShare:P0} "
             + $"({runs.Count} arenas, {appliedOverrides.Count} overrides)]{state}");
     }
 
@@ -794,12 +820,22 @@ public class TrainingMatchRunner : MonoBehaviour
     private void AssignBehaviour(ArenaRun run)
     {
         // The learner side always plays itself; the opponent side plays whatever the curriculum says.
+        // The opponent is drawn from the curriculum of the role being TRAINED, not from the role
+        // playing the opponent. These two calls were cross-wired: the companion trained against
+        // opponents from the ENEMY's curriculum and the enemy against opponents from the
+        // COMPANION's. The two curricula agree only while both sit in phase 0, so the swap is
+        // invisible early and then diverges sharply once one role advances. Measured from a run's CSV:
+        // companion-learner opponents were random 508 / rule 64 (the enemy's random-then-rule mix)
+        // while enemy-learner opponents were 100% random (the companion's stuck-at-phase-0 mix). The
+        // consequence was the companion being fed rule-based opponents its own curriculum had not yet
+        // promoted it to, so its eval-vs-rule stayed low, its curriculum could never advance, and its
+        // critic sat near zero while the enemy trained on pure random and raced ahead.
         run.allySource = run.trainsCompanion
             ? BehaviourSource.Live
-            : (TrainingMode.curriculum ? PolicyLearner.CurriculumFor(PolicyLearner.RoleCompanion).Draw()
+            : (TrainingMode.curriculum ? PolicyLearner.CurriculumFor(PolicyLearner.RoleEnemy).Draw()
                                        : BehaviourSource.Live);
         run.enemySource = run.trainsCompanion
-            ? (TrainingMode.curriculum ? PolicyLearner.CurriculumFor(PolicyLearner.RoleEnemy).Draw()
+            ? (TrainingMode.curriculum ? PolicyLearner.CurriculumFor(PolicyLearner.RoleCompanion).Draw()
                                        : BehaviourSource.Live)
             : BehaviourSource.Live;
 
@@ -843,6 +879,13 @@ public class TrainingMatchRunner : MonoBehaviour
         foreach (var a in run.allies)
             if (a is AIController ai) ai.SetBehaviourSource(run.allySource);
         if (run.enemy is AIController enemyAi) enemyAi.SetBehaviourSource(run.enemySource);
+
+        // New match begins here, so reset each fighter's terminal-bonus attribution. This is called at
+        // wiring and again after every FinishMatch (post-bonus), which makes it the exact per-match
+        // boundary. Done per fighter rather than as a global sweep because arenas share a role brain.
+        foreach (var a in run.allies)
+            if (a is AIController ai) PolicyLearner.NotifyMatchStart(ai);
+        if (run.enemy is AIController eai) PolicyLearner.NotifyMatchStart(eai);
     }
 
     /// <summary>
