@@ -294,7 +294,7 @@ public class TrainingMatchRunner : MonoBehaviour
             foreach (var f in run.arena.FightersInArena())
             {
                 if (f == null) continue;
-                if (f.Team == CombatTeam.Player) run.allies.Add(f);
+                if (CombatTeamUtility.SideOf(f.Team) == CombatSide.PlayerSide) run.allies.Add(f);
                 else if (f.Team == CombatTeam.Enemy) run.enemy = f;
             }
 
@@ -351,7 +351,11 @@ public class TrainingMatchRunner : MonoBehaviour
         if (stageBuilder != null) Debug.Log($"[Training] stage: {stageBuilder.StageSummary()}");
         // Stated on the banner because it changes every reward the run sees. A balance change that is
         // not in the log makes two segments' CSVs look like a policy regression.
-        Debug.Log($"[Training] combat balance: {CombatBalance.Describe()}.");
+        if (stageBuilder != null && stageBuilder.playerData != null
+            && stageBuilder.companionData != null && stageBuilder.enemyData != null)
+            Debug.Log($"[Training] combat stats: player {stageBuilder.playerData.maxHealth:0.###} HP x{stageBuilder.playerData.damageMultiplier:0.###} damage, "
+                + $"companion {stageBuilder.companionData.maxHealth:0.###} HP x{stageBuilder.companionData.damageMultiplier:0.###} damage, "
+                + $"enemy {stageBuilder.enemyData.maxHealth:0.###} HP x{stageBuilder.enemyData.damageMultiplier:0.###} damage.");
     }
 
     /// <summary>
@@ -432,9 +436,7 @@ public class TrainingMatchRunner : MonoBehaviour
             if (a == null || a.gameObject.name != $"TrainingArena_{arenaIndex}") continue;
             foreach (var f in a.GetComponentsInChildren<CharacterController>(true))
             {
-                // TrainingArenaBuilder names its three fighters, which is what makes a per-slot
-                // binding possible at all. Team cannot do it: BOTH allies are CombatTeam.Player in a
-                // training arena, so a team-based mapping has nothing to distinguish them with.
+                // TrainingArenaBuilder names its three fighters for this per-slot HUD binding.
                 switch (f.name)
                 {
                     case "Player": playerFighter = f; break;

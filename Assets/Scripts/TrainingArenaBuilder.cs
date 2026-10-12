@@ -75,8 +75,10 @@ public class TrainingArenaBuilder : MonoBehaviour
     public float wallHeadroom = 1f;
 
     [Header("Fighters")]
-    [Tooltip("Health each spawned fighter starts a match with.")]
-    public float fighterHealth = 100f;
+    [Tooltip("CharacterData components in the scene that supply the player, companion, and enemy combat stats to training fighters.")]
+    public CharacterData playerData;
+    public CharacterData companionData;
+    public CharacterData enemyData;
 
     [Tooltip("Fighter collision size in world units. Must match the authored fighters, since the "
              + "move hitboxes and knockdown logic are sized against it.")]
@@ -125,6 +127,11 @@ public class TrainingArenaBuilder : MonoBehaviour
             Debug.LogWarning("TrainingArenaBuilder.Build called outside a training run; ignoring.");
             return null;
         }
+        if (playerData == null || companionData == null || enemyData == null)
+        {
+            Debug.LogError("TrainingArenaBuilder needs player, companion, and enemy CharacterData references.");
+            return null;
+        }
 
         allies.Clear();
         enemy = null;
@@ -149,18 +156,18 @@ public class TrainingArenaBuilder : MonoBehaviour
         BuildStage(root.transform);
         ValidateStage();
 
-        // Two allies on the Player team against one Enemy. NOT arbitrary teams: AreEnemies() returns
-        // false whenever either side is Neutral, so Neutral fighters would pass through each other.
+        // Player and Companion share a side against Enemy. Neutral fighters would pass through
+        // everyone because AreEnemies() returns false for them.
         bool render = renderFighters && index == renderArenaIndex;
 
         // Spawned in turn-relevant order: player first, then the companion behind it, then the enemy.
         // Every fighter picks blind and acts in the same tick, so registration order does not affect
         // the fight, but it keeps the log readable.
-        var player = SpawnFighter(root.transform, "Player", CombatTeam.Player,
+        var player = SpawnFighter(root.transform, "Player", CombatTeam.Player, playerData,
                                   -startSeparation, render, facingLeft: false);
-        var companion = SpawnFighter(root.transform, "Companion", CombatTeam.Player,
+        var companion = SpawnFighter(root.transform, "Companion", CombatTeam.Companion, companionData,
                                      -startSeparation - companionStandoff, render, facingLeft: false);
-        var foe = SpawnFighter(root.transform, "Enemy", CombatTeam.Enemy,
+        var foe = SpawnFighter(root.transform, "Enemy", CombatTeam.Enemy, enemyData,
                                startSeparation, render, facingLeft: true);
         allies.Add(player);
         allies.Add(companion);
@@ -307,7 +314,7 @@ public class TrainingArenaBuilder : MonoBehaviour
         go.AddComponent<StaticCollider>();
     }
 
-    private CharacterController SpawnFighter(Transform parent, string name, CombatTeam team,
+    private CharacterController SpawnFighter(Transform parent, string name, CombatTeam team, CharacterData source,
                                              float x, bool render, bool facingLeft)
     {
         GameObject go;
@@ -327,8 +334,9 @@ public class TrainingArenaBuilder : MonoBehaviour
         if (data != null)
         {
             data.team = team;
-            data.health = fighterHealth;
-            data.maxHealth = fighterHealth;
+            data.health = source.health;
+            data.maxHealth = source.maxHealth;
+            data.damageMultiplier = source.damageMultiplier;
             // A bare fighter has no authored size, and CharacterPhysics.getBoundingBox is built from
             // these. Left at zero the fighter has no hitbox at all, so nothing can ever hit it and
             // every match would end 0-0 with no damage and no learning signal.

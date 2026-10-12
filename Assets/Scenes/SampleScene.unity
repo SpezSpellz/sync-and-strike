@@ -851,10 +851,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CharacterData
   width: 0.5
   height: 0.7
-  health: 100
-  maxHealth: 100
+  health: 150
+  maxHealth: 150
   team: 3
   isPlayerSide: 0
+  damageMultiplier: 1.5
 --- !u!114 &244021956
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1058,7 +1059,9 @@ MonoBehaviour:
   wallThickness: 1.5113791
   wallOvershoot: 3
   wallHeadroom: 1
-  fighterHealth: 100
+  playerData: {fileID: 1956807352}
+  companionData: {fileID: 584489100}
+  enemyData: {fileID: 244021955}
   fighterWidth: 0.5
   fighterHeight: 0.7
   fighterRenderScale: 3
@@ -1421,10 +1424,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CharacterData
   width: 0.5
   height: 0.7
-  health: 100
-  maxHealth: 100
+  health: 50
+  maxHealth: 50
   team: 2
   isPlayerSide: 1
+  damageMultiplier: 0.5
 --- !u!114 &584489101
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3802,6 +3806,7 @@ MonoBehaviour:
   maxHealth: 100
   team: 1
   isPlayerSide: 0
+  damageMultiplier: 1
 --- !u!114 &1956807353
 MonoBehaviour:
   m_ObjectHideFlags: 0

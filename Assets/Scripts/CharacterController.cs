@@ -315,37 +315,11 @@ public class CharacterController : MonoBehaviour
 
     public virtual void Start()
     {
-        ApplyCombatBalance();
-
         previewController?.Initialize(characterData);
         anim.Initialize(characterData.animations);
         stateMachine.Change(new IdleState(this));
-        // Registration snapshots Save() (which stores health), so the balance scaling above must run
-        // BEFORE this line for every match reset to restore the scaled health rather than the base.
+        // Registration snapshots the health authored on CharacterData for match resets.
         this.id = Turn.RegisterPlayer(this);
-    }
-
-    /// <summary>
-    /// Apply the enemy's <see cref="CombatBalance"/> multipliers to this fighter, if it is the enemy.
-    ///
-    /// Runs for code-built training fighters AND authored scene fighters alike, which is the point:
-    /// the training arena has no authored CharacterData to inherit these values from.
-    /// </summary>
-    private void ApplyCombatBalance()
-    {
-        if (characterData == null) return;
-
-        if (characterData.team != CombatTeam.Enemy)
-        {
-            characterData.damageMultiplier = 1f;
-            return;
-        }
-
-        characterData.damageMultiplier = CombatBalance.enemyDamageMultiplier;
-
-        if (CombatBalance.enemyHealthMultiplier == 1f) return;
-        characterData.maxHealth *= CombatBalance.enemyHealthMultiplier;
-        characterData.health = characterData.maxHealth;
     }
 
     public void PlayIdleAnimation() => anim.PlayIdle();
