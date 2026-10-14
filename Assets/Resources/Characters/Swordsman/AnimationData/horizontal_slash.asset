@@ -15,7 +15,10 @@ MonoBehaviour:
   move: 2
   moveId: horizontal_slash
   moveName: H Slash
-  icon: {fileID: -2204512283233211356, guid: 0bfe03ada1311374c966810c6a7610b7, type: 3}
+  onlyGrounded: 0
+  usableInKnockedback: 0
+  icon: {fileID: 5006129369006066607, guid: 9b05205b812975a4da2cd02e492bbe62, type: 3}
+  requiredInput: 0
   frames:
   - {fileID: 582249055, guid: d9aa655246255e04d80a917f92ed2d8e, type: 3}
   - {fileID: -2089498518, guid: d9aa655246255e04d80a917f92ed2d8e, type: 3}
@@ -38,10 +41,32 @@ MonoBehaviour:
       knockback: {x: 0.24, y: 0.07}
       hitHeight: 1
       hitstunTicks: 13
+      knockdown: 0
+      hardKnockdown: 0
+      wallSlam: 0
+      groundBounce: 0
+      airGroundBounce: 0
+      groundBounceKnockbackModifier: 0
+      knockdownExtendsHitstun: 0
+      minimumGroundedFrames: 0
+      canCounterHit: 0
+      launchGrounded: 0
+      keepCollisionOnHit: 0
+      diModifier: 0
+      pushbackX: 0
       hitlagTicks: 4
       victimHitlag: 4
+      plusFrames: 0
+      damageProration: 0
       scaleCombo: 1
       incrementCombo: 1
+      comboScalingAmount: 0
+      blockPushbackModifier: 0
+      blockPushbackReversible: 0
+      blockReversePushbackModifier: 0
+      chipDamageModifier: 0
   firstActionable: 14
+  continuousImpulse: 0
   impulse: {x: 0.55, y: 0}
   knockback: 0
+  jumpSpeed: 0

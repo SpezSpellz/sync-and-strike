@@ -17,7 +17,7 @@ MonoBehaviour:
   moveName: Dash
   onlyGrounded: 1
   usableInKnockedback: 0
-  icon: {fileID: -7848039375673857549, guid: 0b40fc3d9c4487143804b43d851a7800, type: 3}
+  icon: {fileID: -4833837231316016818, guid: 94466569aa6bf8544b13f0bb1c448d7a, type: 3}
   requiredInput: 0
   frames:
   - {fileID: -1291688497, guid: 04dd565d3f46b414ca3ba3c130551d71, type: 3}
@@ -25,5 +25,6 @@ MonoBehaviour:
   events: []
   firstActionable: 10
   continuousImpulse: 0
-  impulse: {x: 1.0, y: 0}
+  impulse: {x: 1, y: 0}
   knockback: 0
+  jumpSpeed: 0

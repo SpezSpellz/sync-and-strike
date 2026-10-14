@@ -17,7 +17,7 @@ MonoBehaviour:
   moveName: Idle
   onlyGrounded: 0
   usableInKnockedback: 1
-  icon: {fileID: -6043352356649296883, guid: a6b56b19e2996e44e88a96e87e2e239c, type: 3}
+  icon: {fileID: 2169038382862633916, guid: 94466569aa6bf8544b13f0bb1c448d7a, type: 3}
   requiredInput: 0
   frames:
   - {fileID: 8793639957104055765, guid: 13acd91e8b5a7774ebf75fbb402028e4, type: 3}
@@ -27,3 +27,4 @@ MonoBehaviour:
   continuousImpulse: 0
   impulse: {x: 0, y: 0}
   knockback: 0
+  jumpSpeed: 0

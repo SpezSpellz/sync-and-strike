@@ -15,13 +15,51 @@ MonoBehaviour:
   move: 5
   moveId: block
   moveName: Block
-  icon: {fileID: 2537882373423050008, guid: 28bdf2362f370f84b8efdc9ce312de12, type: 3}
+  onlyGrounded: 0
+  usableInKnockedback: 0
+  icon: {fileID: -3337239602968839386, guid: 94466569aa6bf8544b13f0bb1c448d7a, type: 3}
+  requiredInput: 0
   frames:
   - {fileID: 5865670524570963042, guid: c816c542ac7a4054b8fd912f6ae5b055, type: 3}
   loop: 0
   events:
   - frame: 0
     type: 3
+    hitboxData:
+      offsetX: 0
+      offsetY: 0
+      width: 0
+      height: 0
+      damage: 0
+      knockback: {x: 0, y: 0}
+      hitHeight: 0
+      hitstunTicks: 0
+      knockdown: 0
+      hardKnockdown: 0
+      wallSlam: 0
+      groundBounce: 0
+      airGroundBounce: 0
+      groundBounceKnockbackModifier: 0
+      knockdownExtendsHitstun: 0
+      minimumGroundedFrames: 0
+      canCounterHit: 0
+      launchGrounded: 0
+      keepCollisionOnHit: 0
+      diModifier: 0
+      pushbackX: 0
+      hitlagTicks: 0
+      victimHitlag: 0
+      plusFrames: 0
+      damageProration: 0
+      scaleCombo: 0
+      incrementCombo: 0
+      comboScalingAmount: 0
+      blockPushbackModifier: 0
+      blockPushbackReversible: 0
+      blockReversePushbackModifier: 0
+      chipDamageModifier: 0
   firstActionable: 5
+  continuousImpulse: 0
   impulse: {x: 0, y: 0}
   knockback: 0
+  jumpSpeed: 0

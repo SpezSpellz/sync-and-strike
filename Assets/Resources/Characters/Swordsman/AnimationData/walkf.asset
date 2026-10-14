@@ -15,7 +15,10 @@ MonoBehaviour:
   move: 0
   moveId: walkf
   moveName: Walk F
-  icon: {fileID: -282247020, guid: c0c0c88ff0d32ea44b320d1f9e77e13e, type: 3}
+  onlyGrounded: 0
+  usableInKnockedback: 0
+  icon: {fileID: -1414472869465003340, guid: 94466569aa6bf8544b13f0bb1c448d7a, type: 3}
+  requiredInput: 0
   frames:
   - {fileID: -6105628673336481916, guid: b95779b338aa8a541ae6e02df5c74a83, type: 3}
   - {fileID: 5718579488667071350, guid: b95779b338aa8a541ae6e02df5c74a83, type: 3}
@@ -28,3 +31,4 @@ MonoBehaviour:
   continuousImpulse: 1
   impulse: {x: 0.015, y: 0}
   knockback: 0
+  jumpSpeed: 0
